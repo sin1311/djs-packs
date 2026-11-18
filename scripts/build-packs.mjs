@@ -25,7 +25,7 @@ const REPOS = {
 }
 // 등급별 설정: 세기 레이어 수 · 길이 상한(초) · 비트레이트(kbps)
 const Q = {
-  lite: { pianoLayers: [4, 8, 12, 16], cap: 1, kbps: { 1: 40, 2: 56 }, relEvery: 3 },
+  lite: { pianoLayers: [4, 8, 12, 16], cap: 1, kbps: { 1: 48, 2: 64 }, relEvery: 3 }, /* v1.0-B.3: 40/56 → 48/64 kbps (10MB 안에서 조금 더 맑게) */
   standard: { pianoLayers: [2, 5, 8, 11, 14, 16], cap: 1.6, kbps: { 1: 64, 2: 96 }, relEvery: 1 },
   full: { pianoLayers: [1, 3, 5, 7, 9, 11, 13, 14, 15, 16], cap: 2.4, kbps: { 1: 80, 2: 104 }, relEvery: 1 }, /* 등급마다 따로 가지(ref)에 올려요: jsDelivr 는 ref 하나 50MB · 파일 하나 20MB 까지 [확인 필요] */
 }[TIER]
