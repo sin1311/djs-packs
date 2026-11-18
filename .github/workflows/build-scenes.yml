@@ -1,0 +1,49 @@
+# 장면 공장: Actions 탭 → build-scenes → Run workflow (사람이 시작해요, 자동으로 돌지 않아요)
+#  scripts/scene-factory.mjs 가 Poly Haven(CC0) HDRI 를 받아 → 라이선스 검사 → 얼굴(YuNet) · 번호판(후보) 흐림 →
+#  큐브맵 6면 깊이(Depth Anything V2 Small, ONNX · CPU) → 면 사이 (s, t) 정렬 → 지면 캘리브레이션 → 2~3층 LDI → 팩으로 만들어
+#  scenes 가지에 올려요. 앱은 jsDelivr(cdn.jsdelivr.net/gh/sin1311/djs-packs@scenes/) 와 GitHub raw 로 받아요.
+#  사람 확인: report.json 의 privacy.review 가 true 인 장면은 앱이 "확인 전" 으로 표시하고 기본 선택에서 빼요.
+name: build-scenes
+on:
+  workflow_dispatch:
+    inputs:
+      ids:
+        description: 'Poly Haven HDRI id (비우면 주제별 자동 고르기). 예: "urban_street_01:city snowy_park_01:market"'
+        default: ''
+      size:
+        description: '등장방형 가로 화소'
+        default: '2048'
+permissions:
+  contents: write
+concurrency:
+  group: build-scenes
+  cancel-in-progress: false
+jobs:
+  scenes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: 도구 (sharp · onnxruntime-node CPU)
+        run: |
+          npm i --no-save sharp@0.33.5
+          npm i --no-save --ignore-scripts onnxruntime-node@1.20.1
+      - name: 모델 받기 (Depth Anything V2 Small = Apache-2.0 · YuNet = MIT)
+        run: |
+          mkdir -p models
+          curl -fL -o models/dav2s.onnx https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/main/onnx/model.onnx
+          curl -fL -o models/yunet.onnx https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx
+          ls -la models
+      - name: 장면 만들기 · scenes 가지에 올리기
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          IDS="${{ github.event.inputs.ids }}"
+          node scripts/scene-factory.mjs --source polyhaven ${IDS:+--ids "$IDS"} --size "${{ github.event.inputs.size }}" --depth models/dav2s.onnx --face models/yunet.onnx --out out/scenes
+          cat out/scenes/report.json
+          du -sh out/scenes
+          cp README.md out/scenes/README.md
+          (cd out/scenes && git init -q -b scenes && git add -A && git commit -q -m "장면 팩" && git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" scenes)
