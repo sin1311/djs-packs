@@ -67,7 +67,7 @@ async function privacy(s, rgb) {
     for (let i = 0; i < 6; i++) { const f = faceRGB(rgb, W, H, i, S), t = new Float32Array(3 * S * S); for (let p = 0; p < S * S; p++) for (let c = 0; c < 3; c++) t[c * S * S + p] = f[p * 3 + (2 - c)] /* BGR */; const out = await sess.run({ [sess.inputNames[0]]: new ort.Tensor('float32', t, [1, 3, S, S]) }); for (const b of yunetDecode(out, S)) { boxes.push(toEq(i, { x: b.x - b.w * 0.2, y: b.y - b.h * 0.2, w: b.w * 1.4, h: b.h * 1.4 }, S)); faces++ } }
   } else if (s.kind !== 'synthetic') log('경고: --face 모델이 없어 얼굴을 찾지 못했어요 → 이 장면은 사람 확인 목록에 올라가요')
   const N = 512, plates = []; for (let i = 0; i < 6; i++) if (i !== 2) for (const b of plateCandidates(faceRGB(rgb, W, H, i, N), N, N)) plates.push(toEq(i, b, N))
-  return { rgb: blurBoxes(rgb, W, H, [...boxes, ...plates]), faces, plates: plates.length, review: !A.face || plates.length > 0, note: '번호판은 휴리스틱 후보 — 사람이 확인해요' }
+  return { rgb: blurBoxes(rgb, W, H, [...boxes, ...plates]), faces, plates: plates.length, review: !A.face, note: '번호판 후보 ' + plates.length + '곳을 흐렸어요 (휴리스틱 — report.json 에서 확인)' }
 }
 // 깊이: 실제 모델(Depth Anything V2 Small) 또는 합성 장면의 정답 흉내
 async function depthFaces(s, rgb, truth) {
