@@ -213,10 +213,11 @@ async function calibLevel() {
     for (const base of tilts) {
       const deg = base ? base + (R() - 0.5) * 2 * Math.min(2, base * 0.4) : 0, az = R() * Math.PI * 2, r = (deg * Math.PI) / 180, vt = [Math.sin(r) * Math.cos(az), Math.cos(r), Math.sin(r) * Math.sin(az)], M = L.levelRotation(vt)
       const im = deg ? L.rotateEquirect(rgb, 1024, 512, [M[0], M[3], M[6], M[1], M[4], M[7], M[2], M[5], M[8]]) : rgb, E = L.edgeNormals(im, 1024, 512)
-      if (F) { try { const g = await F.depthG(im), u = L.groundUp(g, 1024, 512); if (u) samples.push({ id: c.id, deg: +deg.toFixed(2), tol: 'ground', err: +((Math.acos(Math.min(1, Math.abs(u.up[0] * vt[0] + u.up[1] * vt[1] + u.up[2] * vt[2]))) * 180) / Math.PI).toFixed(3), est: +u.tilt.toFixed(2), inl: +u.inl.toFixed(3) }) } catch (e) { log('깊이 실패', c.id, String(e.message).slice(0, 80)) } }
+      if (F && A.panda) { try { const g = await F.pandaG(im), u = L.groundUp(g, 1024, 512); if (u) samples.push({ id: c.id, deg: +deg.toFixed(2), tol: 'panda', vt, v: u.up, err: +((Math.acos(Math.min(1, Math.abs(u.up[0] * vt[0] + u.up[1] * vt[1] + u.up[2] * vt[2]))) * 180) / Math.PI).toFixed(3), est: +u.tilt.toFixed(2), inl: +u.inl.toFixed(3) }) } catch (e) { log('PanDA 실패', c.id, String(e.message).slice(0, 80)) } }
+      if (F) { try { const g = await F.depthG(im), u = L.groundUp(g, 1024, 512); if (u) samples.push({ id: c.id, deg: +deg.toFixed(2), tol: 'ground', vt, v: u.up, err: +((Math.acos(Math.min(1, Math.abs(u.up[0] * vt[0] + u.up[1] * vt[1] + u.up[2] * vt[2]))) * 180) / Math.PI).toFixed(3), est: +u.tilt.toFixed(2), inl: +u.inl.toFixed(3) }) } catch (e) { log('깊이 실패', c.id, String(e.message).slice(0, 80)) } }
       for (const tol of [0.012, 0.008]) { const P = L.upParts(E, { tol }); if (!P.g) { samples.push({ id: c.id, deg, tol, none: true }); continue }
         const err = (Math.acos(Math.min(1, Math.abs(P.g.v[0] * vt[0] + P.g.v[1] * vt[1] + P.g.v[2] * vt[2]))) * 180) / Math.PI, ang = P.a && P.b ? (Math.acos(Math.min(1, Math.abs(P.a.v[0] * P.b.v[0] + P.a.v[1] * P.b.v[1] + P.a.v[2] * P.b.v[2]))) * 180) / Math.PI : 99
-        samples.push({ id: c.id, deg: +deg.toFixed(2), tol, err: +err.toFixed(3), est: +P.g.tilt.toFixed(2), ang: +ang.toFixed(2), ia: P.a ? P.a.inl : 0, ib: P.b ? P.b.inl : 0, frac: +P.g.frac.toFixed(4) }) }
+        samples.push({ id: c.id, deg: +deg.toFixed(2), tol, vt, v: P.g.v, err: +err.toFixed(3), est: +P.g.tilt.toFixed(2), ang: +ang.toFixed(2), ia: P.a ? P.a.inl : 0, ib: P.b ? P.b.inl : 0, frac: +P.g.frac.toFixed(4) }) }
     }
   })
   const rows = []
@@ -230,10 +231,22 @@ async function calibLevel() {
     if (S.length) grows.push({ method: 'ground', minInl, maxApply, minTilt, cover: +(A1.length / Math.max(1, tilted.length)).toFixed(3), e95: +qq(0.95).toFixed(2), e99: +qq(0.99).toFixed(2), badFlat: +(A0.filter((x) => x.err > 1).length / Math.max(1, flat.length)).toFixed(3), n: A1.length }) }
   const ggood = grows.filter((r) => r.e95 <= 1 && r.e99 <= 2 && r.badFlat <= 0.01).sort((a, b) => b.cover - a.cover || a.e99 - b.e99 || b.minInl - a.minInl)
   if (grows.length) { log('깊이(지면) 방식 — 조건을 지키는 규칙', ggood.length, '개'); for (const r of ggood.slice(0, 8)) log('  깊이 후보', JSON.stringify(r)); const G = samples.filter((x) => x.tol === 'ground'), bd = {}; for (const x of G) { const k = x.deg === 0 ? '0' : x.deg < 5 ? '1-5' : '5-12'; (bd[k] = bd[k] || []).push(x.err) } for (const [k, v] of Object.entries(bd)) { v.sort((a, b) => a - b); log(`  깊이 잰 오차 (기울기 ${k}°) 중앙/90%:`, v[v.length >> 1], '/', v[Math.floor(v.length * 0.9)], `(${v.length})`) } }
+  /* 합의 규칙: 서로 다른 방식 둘(경계 · 깊이 6면 · PanDA)이 δ 안에서 같은 위를 가리킬 때만 바로잡아요 (적용 방향 = 두 방향 평균) */
+  const key = (x) => x.id + '|' + x.deg, by = {}; for (const x of samples) if (x.v && (x.tol === 0.012 || x.tol === 'ground' || x.tol === 'panda')) { const k = key(x); (by[k] = by[k] || {})[x.tol === 0.012 ? 'edge' : x.tol] = x }
+  const arows = [], ang = (a, b) => (Math.acos(Math.min(1, Math.abs(a[0] * b[0] + a[1] * b[1] + a[2] * b[2]))) * 180) / Math.PI
+  for (const [m1, m2] of [['edge', 'ground'], ['edge', 'panda'], ['ground', 'panda']]) for (const dl of [0.5, 1, 1.5, 2]) for (const maxApply of [10, 15]) {
+    let nt = 0, nf = 0, acc = [], bad = 0
+    for (const r of Object.values(by)) { const a = r[m1], b = r[m2]; if (!a || !b) { if ((a || b) && (a || b).deg >= 1) nt++; else if (a || b) nf++; continue } const deg = a.deg; if (deg >= 1) nt++; else nf++
+      if (ang(a.v, b.v) > dl) continue; const m = [a.v[0] + b.v[0], a.v[1] + b.v[1], a.v[2] + b.v[2]], l = Math.hypot(...m), v = m.map((x) => x / l), est = (Math.acos(Math.min(1, v[1])) * 180) / Math.PI; if (est < 0.4 || est > maxApply) continue
+      const e = ang(v, a.vt); if (deg >= 1) acc.push(e); else if (e > 1) bad++ }
+    acc.sort((p, q) => p - q); const q = (p) => (acc.length ? acc[Math.min(acc.length - 1, Math.floor(acc.length * p))] : 0)
+    arows.push({ pair: m1 + '+' + m2, agree: dl, maxApply, cover: +(acc.length / Math.max(1, nt)).toFixed(3), e95: +q(0.95).toFixed(2), e99: +q(0.99).toFixed(2), badFlat: +(bad / Math.max(1, nf)).toFixed(3), n: acc.length }) }
+  const agood = arows.filter((r) => r.n >= 5 && r.e95 <= 1 && r.e99 <= 2 && r.badFlat <= 0.01).sort((a, b) => b.cover - a.cover || a.e99 - b.e99)
+  log('합의 규칙 — 조건을 지키는 것', agood.length, '개'); for (const r of agood.slice(0, 8)) log('  합의 후보', JSON.stringify(r)); for (const r of arows.filter((x) => x.agree === 1 && x.maxApply === 15)) log('  합의 (δ 1° · 최대 15°)', JSON.stringify(r))
   const good = rows.filter((r) => r.e95 <= 1 && r.e99 <= 2 && r.badFlat <= 0.01).sort((a, b) => b.cover - a.cover || a.e99 - b.e99 || b.minInl - a.minInl || a.agree - b.agree), cur = rows.find((r) => r.tol === 0.012 && r.minInl === 120 && r.agree === 1 && r.rel === 0.15 && r.maxApply === 25)
   log('보정: 사진', list.length, '· 표본', samples.length, '· 지금 규칙', JSON.stringify(cur)); for (const r of good.slice(0, 8)) log('  후보', JSON.stringify(r))
   const raw = samples.filter((x) => x.tol === 0.012 && !x.none), byDeg = {}; for (const x of raw) { const k = x.deg === 0 ? '0' : x.deg < 5 ? '1-5' : '5-12'; (byDeg[k] = byDeg[k] || []).push(x.err) } for (const [k, v] of Object.entries(byDeg)) { v.sort((a, b) => a - b); log(`  잰 오차 (기울기 ${k}°) 중앙/90%:`, v[v.length >> 1], '/', v[Math.floor(v.length * 0.9)], `(${v.length})`) }
-  await wr(join(WORK, 'calib-level.json'), { best: good[0] || null, current: cur, top: good.slice(0, 20), ground: { best: ggood[0] || null, top: ggood.slice(0, 20), all: grows }, samples })
+  await wr(join(WORK, 'calib-level.json'), { best: good[0] || null, current: cur, top: good.slice(0, 20), ground: { best: ggood[0] || null, top: ggood.slice(0, 20), all: grows }, agree: { best: agood[0] || null, all: arows }, samples })
 }
 // 깊이 A/B (try-panda 워크플로): 지금(Depth Anything V2 Small · 큐브 6면 + 면 맞춤) vs PanDA-Small(등장방형 한 번) — 같은 Poly Haven 사진으로
 //  · 지면 맞춤 비율(반듯한 사진) · 면 경계 이음매(경계 화소의 log 깊이 기울기 ÷ 다른 곳) · 아는 기울기(6°)에서 깊이 수평 오차 · 걸린 시간

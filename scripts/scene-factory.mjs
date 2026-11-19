@@ -194,7 +194,7 @@ async function buildShot(s) {
 }
 export { buildShot }
 async function depthG(rgb) { const { faces } = await depthFaces({ id: 'calib' }, rgb, null), ab = alignFaces(faces, FN); return mergeFaces(faces, ab, W, H, FN) } /* 보정용: 병합 깊이 g (W×H) */
-export { build, THEMES, loadRGB, img, sha, depthG, W as SIZE_W }
+export { build, THEMES, loadRGB, img, sha, depthG, pandaG, W as SIZE_W }
 const MAIN = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href /* 다른 스크립트(scene-mass)가 불러 쓸 때는 아래를 돌리지 않아요 */
 if (MAIN) await (async () => {
 const list = await sources(), done = []; await mkdir(OUT, { recursive: true })

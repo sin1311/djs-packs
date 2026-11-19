@@ -22,9 +22,19 @@ jobs:
           npm init -y > /dev/null
           ONNXRUNTIME_NODE_INSTALL_CUDA=skip npm i sharp@0.33.5 onnxruntime-node@1.20.1
           mkdir -p models && curl -fL -o models/dav2s.onnx https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/main/onnx/model.onnx
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - name: PanDA-Small → ONNX (세 번째 방식)
+        continue-on-error: true
+        run: |
+          git clone --depth 1 https://github.com/caozidong/PanDA PanDA
+          pip install -q torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          pip install -q einops pyyaml opencv-python-headless onnx onnxscript safetensors matplotlib pillow
+          curl -fL -o models/panda_small.pth "https://huggingface.co/ZidongC/PanDA/resolve/main/panda_small.pth?download=true"
+          python scripts/export-panda.py "$(pwd)/models/panda_small.pth"
       - name: 보정
         run: |
-          D=""; [ "${{ github.event.inputs.depth }}" != "false" ] && D="--depth models/dav2s.onnx"
+          D=""; [ "${{ github.event.inputs.depth }}" != "false" ] && D="--depth models/dav2s.onnx"; [ -f models/panda_small.onnx ] && D="$D --panda models/panda_small.onnx"
           node scripts/scene-mass.mjs --stage calib-level --n "${{ github.event.inputs.n }}" --tilts "${{ github.event.inputs.tilts }}" $D
       - uses: actions/upload-artifact@v4
         with: { name: calib-level, path: work/calib-level.json }
