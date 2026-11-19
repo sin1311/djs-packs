@@ -4,7 +4,8 @@
 //  · 모든 수집기는 fetch 를 주입받아요(시험에서 흉내). 실패하면 그 출처만 건너뛰어요.
 //  · 위키미디어 정책: 자동 요청에는 연락 가능한 User-Agent 가 필요해요 → 프로젝트 저장소 주소만 넣어요(개인 정보는 넣지 않아요).
 export const UA = 'djs-scene-factory/1.0 (+https://github.com/sin1311/djs-packs)'
-const J = async (fetch, url, o = {}) => { const r = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/json', ...(o.headers || {}) } }); if (!r.ok) throw new Error(`HTTP ${r.status} ${url.slice(0, 80)}`); return r.json() }
+export const redact = (u) => String(u).replace(/(access_token|token|key)=[^&]*/gi, '$1=***') /* 공개 로그에 토큰이 찍히지 않게 (첫 실행에서 주소째 찍혔어요) */
+const J = async (fetch, url, o = {}) => { const r = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/json', ...(o.headers || {}) } }); if (!r.ok) throw new Error(`HTTP ${r.status} ${redact(url).slice(0, 80)}`); return r.json() }
 const strip = (h) => String(h || '').replace(/<[^>]+>/g, ' ').replace(/&[a-z]+;/g, ' ').replace(/\s+/g, ' ').trim()
 export const isPano = (w, h) => w > 0 && h > 0 && Math.abs(w / h - 2) < 0.04
 
