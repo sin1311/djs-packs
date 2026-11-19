@@ -1,0 +1,85 @@
+{
+ "format": "djs-scene/1",
+ "id": "modern_evening_street",
+ "name": "노을 도시 · Modern Evening Street",
+ "kind": "reconstructed",
+ "label": "재구성 장면 · CC 자산",
+ "theme": "city",
+ "size": [
+  2048,
+  1024
+ ],
+ "distSize": [
+  512,
+  256
+ ],
+ "h": 1.6,
+ "ground": {
+  "S": 12.158221221873077,
+  "T": 0.08113385466710087,
+  "inl": 0.7901925220165643
+ },
+ "cuts": [
+  5.6967016803086405,
+  27.524952300692053
+ ],
+ "layers": [
+  {
+   "color": "l0.webp",
+   "dist": "l0-dist.png",
+   "rmin": 27.5946,
+   "rmax": 400
+  },
+  {
+   "color": "l1.webp",
+   "dist": "l1-dist.png",
+   "rmin": 5.7069,
+   "rmax": 27.489
+  },
+  {
+   "color": "l2.webp",
+   "dist": "l2-dist.png",
+   "rmin": 1.5949,
+   "rmax": 5.687
+  }
+ ],
+ "mood": {
+  "energy": 0.6,
+  "bpm": [
+   85,
+   120
+  ],
+  "moods": [
+   "bright",
+   "calm"
+  ],
+  "genres": [
+   "citypop",
+   "lofi",
+   "disco",
+   "kpop"
+  ]
+ },
+ "car": {
+  "ahead": 9,
+  "side": -1.8
+ },
+ "sources": [
+  {
+   "title": "Modern Evening Street",
+   "author": "Grzegorz Wronkowski",
+   "license": "CC0",
+   "source": "https://polyhaven.com/a/modern_evening_street",
+   "text": "Modern Evening Street (CC0)"
+  }
+ ],
+ "review": false,
+ "files": {
+  "l0.webp": "0ed39abd61eadf915ac540029ff9e55a979c4b8b131c5f4871a6be9488d03e0a",
+  "l0-dist.png": "8ea5b734215b32e9b2b2ce8d727bfb23f1b856f9857b5bf3ebe1a08b576d5585",
+  "l1.webp": "019d284836e63ea4a761e8035555d2e0bfd4e689554098229498f1d97c1daa17",
+  "l1-dist.png": "503dbe6241fe3c52b32c2498dba409313cab63e7d377aebd427f328985f68135",
+  "l2.webp": "10be42ccadce531381bbe6c52d268a425588d3167cf7885279eadb0295d89ce2",
+  "l2-dist.png": "60402f355560667293a069cf42f021de5c6cb05bc537c5d9a8b71891aa9c4bdd"
+ }
+}
