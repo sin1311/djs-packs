@@ -29,7 +29,7 @@ export const qOf = (s) => s._q || (s._q = s.desc ? unpack(s.desc) : themeDist(s.
 export function prepare(scenes, k = 10) { for (const s of scenes) { const q = qOf(s); if (s._rA == null) s._rA = topMean(PROTO.map((p) => bridge(p, q)), k) } return scenes }
 // 장면끼리 닮음 (MMR 용): 같은 장면 · 주제 1, 아니면 서술어 분포의 바타차리야를 0~1 로 펴서
 export function simQ(a, b) { if (!a || !b) return 0; if (a.id === b.id || (a.theme && a.theme === b.theme)) return 1; return clamp((bridge(qOf(a), qOf(b)) - 0.55) / 0.45) }
-export function scoresOf(scenes, f, k = 10) { prepare(scenes); const p = f.p || songDist(f), raw = scenes.map((s) => bridge(p, qOf(s))), rT = topMean(raw, Math.min(k, scenes.length)), c = raw.map((x, i) => 2 * x - rT - scenes[i]._rA), m = c.reduce((a, b) => a + b, 0) / c.length, sd = Math.sqrt(c.reduce((a, b) => a + (b - m) ** 2, 0) / c.length) || 1; return c.map((x) => (x - m) / sd) } /* z 점수: 장면이 3곳이든 3000곳이든 같은 온도가 통해요 */
+export function scoresOf(scenes, f, k = 10) { prepare(scenes); const p = f.p || songDist(f), raw = scenes.map((s) => bridge(p, qOf(s))), rT = topMean(raw, Math.min(k, scenes.length)), c = raw.map((x, i) => 2 * x - rT - scenes[i]._rA), m = c.reduce((a, b) => a + b, 0) / c.length, sd = Math.sqrt(c.reduce((a, b) => a + (b - m) ** 2, 0) / c.length) || 1; return c.map((x, i) => (x - m) / sd + ((f.boost && f.boost[scenes[i].theme]) || 0)) } /* boost: 추천 취향(좋아한 장면 주제) 가산점 */ /* z 점수: 장면이 3곳이든 3000곳이든 같은 온도가 통해요 */
 // st = { n: 재생 횟수, last: { id: 마지막으로 고른 n }, prev: id } (저장해 두면 다음에도 이어져요)
 export function probs(scenes, f, st = { n: 0, last: {}, prev: null }, o = SEL) {
   const prev = scenes.find((s) => s.id === st.prev), sc = scoresOf(scenes, f), z = scenes.map((s, i) => (sc[i] - o.lambda * (prev ? simQ(s, prev) : 0) /* 직전 장면 자신도 닮음 1 → 같은 장면 반복에 벌점 */) / o.tau), mx = Math.max(...z)
@@ -49,4 +49,4 @@ export function kOccurrence(scenes, fs, k = 1) {
   const v = Object.values(cnt), n = v.length, m = v.reduce((a, b) => a + b, 0) / n, sd = Math.sqrt(v.reduce((a, b) => a + (b - m) ** 2, 0) / n) || 1
   return { cnt, skew: v.reduce((a, b) => a + ((b - m) / sd) ** 3, 0) / n }
 }
-export const featOf = (D) => ({ energy: clamp(D.energy ?? 0.6), bpm: D.bpm || 110, mood: D.mood || 'bright', genres: D.genres || {}, section: D.section || '' })
+export const featOf = (D) => ({ energy: clamp(D.energy ?? 0.6), bpm: D.bpm || 110, mood: D.mood || 'bright', genres: D.genres || {}, section: D.section || '', boost: D.planThemes ? Object.fromEntries(D.planThemes.map((t) => [t, 0.7])) : null })

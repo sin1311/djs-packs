@@ -107,6 +107,39 @@ async function skiesStage() {
   })
   await wr(join(out, 'skies.json'), list); log('하늘 도서관:', list.length)
 }
-const ST = { catalog, gate: gateStage, curate: curateStage, build: buildStage, merge: mergeStage, skies: skiesStage }
+// 합성 하늘 도서관 (앱에 묶는 시험용 · 실사 아님): 한낮 · 금빛 · 노을 · 땅거미 · 별밤 · 흐림 · 폭풍 → <out>/skies + <out>/index.json 의 skies
+async function synthSkies() {
+  const out = A.out || 'public/packs/scenes', W = 1024, H = 512, { dirOf } = await import('../src/scene/geom.js'), { dist } = await import('../src/scene/descriptors.js'), list = []
+  const hash = (a, b) => { let h = (a * 374761393 + b * 668265263) | 0; h = (h ^ (h >>> 13)) * 1274126177; return ((h ^ (h >>> 16)) >>> 0) / 4294967296 }
+  const noise = (x, y) => { const xi = Math.floor(x), yi = Math.floor(y), fx = x - xi, fy = y - yi, s = (t) => t * t * (3 - 2 * t), a = hash(xi, yi), b = hash(xi + 1, yi), c = hash(xi, yi + 1), d = hash(xi + 1, yi + 1); return (a + (b - a) * s(fx)) * (1 - s(fy)) + (c + (d - c) * s(fx)) * s(fy) }
+  const fbm = (x, y) => { let v = 0, a = 0.5; for (let o = 0; o < 5; o++) { v += a * noise(x, y); x *= 2.1; y *= 2.1; a *= 0.5 } return v }
+  const SK = [
+    ['noon', '한낮 맑음', [0.25, 0.5, 0.95], [0.75, 0.85, 1.0], [0, 0.9, -0.4], 0.25, { 'time:noon': 2, 'weather:clear': 2, 'color:vivid': 1 }],
+    ['golden', '금빛 오후', [0.35, 0.5, 0.85], [1.0, 0.8, 0.5], [0, 0.18, -1], 0.35, { 'time:golden': 2, 'weather:cloudy': 1, 'color:warm': 2 }],
+    ['sunset', '노을', [0.25, 0.2, 0.5], [1.0, 0.45, 0.2], [0, 0.03, -1], 0.4, { 'time:sunset': 2.5, 'weather:cloudy': 1, 'color:warm': 2, 'color:purple': 1 }],
+    ['dusk', '땅거미', [0.05, 0.08, 0.25], [0.35, 0.3, 0.55], [0, -0.05, -1], 0.2, { 'time:dusk': 2.5, 'weather:clear': 1, 'color:cool': 1.5, 'color:purple': 1 }],
+    ['night', '별밤', [0.005, 0.01, 0.04], [0.04, 0.05, 0.12], [0.3, 0.5, -0.6], 0.05, { 'time:night': 2.5, 'time:midnight': 1, 'weather:clear': 1.5, 'light:moon': 1, 'color:cool': 1.5 }],
+    ['overcast', '흐림', [0.55, 0.57, 0.6], [0.7, 0.71, 0.72], [0, 0.6, -0.3], 0.9, { 'weather:overcast': 2.5, 'time:noon': 0.8, 'time:morning': 0.8, 'color:mono': 2 }],
+    ['storm', '폭풍 전', [0.18, 0.2, 0.25], [0.4, 0.42, 0.45], [0, 0.3, -1], 1, { 'weather:storm': 2.5, 'weather:rain': 1.5, 'time:dusk': 0.8, 'color:mono': 1.5, 'color:cool': 1 }],
+  ]
+  await mkdir(join(out, 'skies'), { recursive: true }); const d = [0, 0, 0]
+  for (const [id, name, top, hor, sun, cloud, sc] of SK) {
+    const rgb = new Uint8Array(W * H * 3), sn = Math.hypot(...sun), sd = sun.map((x) => x / sn)
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      dirOf((x + 0.5) / W, (y + 0.5) / H, d); const e = Math.max(0, d[1]), t = Math.pow(e, 0.45), i = (y * W + x) * 3
+      let c = [0, 1, 2].map((k) => hor[k] + (top[k] - hor[k]) * t); const cs = Math.max(0, d[0] * sd[0] + d[1] * sd[1] + d[2] * sd[2])
+      if (id !== 'night') { const g = Math.pow(cs, 600) * 30 + Math.pow(cs, 8) * 0.6; c = c.map((v, k) => v + g * [1, 0.9, 0.7][k] * (id === 'overcast' || id === 'storm' ? 0.1 : 1)) } else { const st = e > 0.05 && hash(Math.floor((Math.atan2(d[0], -d[2]) + 4) * 260), Math.floor(d[1] * 260)) > 0.996 ? 0.9 : 0, moon = Math.pow(cs, 3000) * 8; c = c.map((v) => v + st + moon) }
+      if (e > 0.01) { const u = (Math.atan2(d[0], -d[2]) / Math.PI + 1) * 4, w = 1 / (e + 0.08), cl = Math.max(0, fbm(u * 2 + d[0] * w, d[2] * w * 0.6 + 10) - (1 - cloud) * 0.7) * Math.min(1, e * 6) * cloud * 1.6, cc = id === 'sunset' || id === 'golden' ? [1, 0.6, 0.45] : id === 'night' ? [0.05, 0.05, 0.08] : id === 'storm' ? [0.25, 0.26, 0.3] : [0.95, 0.95, 0.97]; c = c.map((v, k) => v * (1 - Math.min(1, cl)) + cc[k] * Math.min(1, cl)) }
+      if (d[1] < 0) c = c.map((v, k) => hor[k] * 0.4)
+      for (let k = 0; k < 3; k++) rgb[i + k] = Math.round(255 * Math.pow(Math.max(0, Math.min(1, c[k] / (1 + c[k]) * 1.3)), 1 / 2.2))
+    }
+    const L = shProject((x, y) => { const i = (y * W + x) * 3; return [lin(rgb[i]), lin(rgb[i + 1]), lin(rgb[i + 2])] }, W, H, 4)
+    const f = `sky-${id}.webp`, buf = await (await img())(Buffer.from(rgb), { raw: { width: W, height: H, channels: 3 } }).webp({ quality: 80 }).toBuffer(); await writeFile(join(out, 'skies', f), buf)
+    const q = dist(Object.fromEntries(Object.entries(sc).map(([k, w]) => [IDX[k], w])), 0.5), hrow = (H / 2 - 4) * W * 3; let hr = 0, hg = 0, hb = 0; for (let x = 0; x < W; x++) { hr += rgb[hrow + x * 3]; hg += rgb[hrow + x * 3 + 1]; hb += rgb[hrow + x * 3 + 2] }
+    list.push({ id: 'synth-' + id, file: f, title: name + ' (합성 하늘 · 실사 아님)', author: 'AI 뮤직 DJ 스튜디오 장면 공장 (합성)', license: 'CC0', source: 'scripts/scene-mass.mjs', sh: L.map((v) => v.map((x) => +x.toFixed(4))), horizon: [hr / W, hg / W, hb / W].map(Math.round), desc: pack(q), sha: (await import('node:crypto')).createHash('sha256').update(buf).digest('hex') })
+  }
+  const ix = await rd(join(out, 'index.json'), { format: 'djs-scenes/1', scenes: [] }); ix.skies = list; await writeFile(join(out, 'index.json'), JSON.stringify(ix, null, 1)); log('합성 하늘:', list.length, '→', join(out, 'skies'))
+}
+const ST = { 'synth-skies': synthSkies, catalog, gate: gateStage, curate: curateStage, build: buildStage, merge: mergeStage, skies: skiesStage }
 for (const s of String(A.stage || 'catalog').split(',')) { if (!ST[s]) throw new Error('모르는 --stage ' + s); log('==', s); await ST[s]() }
 void isPano
