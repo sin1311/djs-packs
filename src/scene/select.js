@@ -6,7 +6,7 @@
 //  · 진단: kOccurrence(장면이 상위 k 에 든 횟수 분포)의 왜도 = 허브니스 지표.
 import { songDist, themeDist, unpack, bridge, GENRE } from './descriptors.js'
 const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v))
-export const SEL = { tau: 0.42, T: 8, lambda: 0.3, floor: 0.02 } /* v1.0-D 시험으로 고른 값 (z 점수 · 장면 수에 맞춘 감쇠): 가상 300곳 × 뽑기 2000번에서 장르에 맞는 주제 90% · 275곳 사용 · 지니 0.44 / 3곳이면 같은 곡 20번에 3종 모두(곡 3 × 씨앗 100 = 300/300) · 첫 선택 1등 99% */
+export const SEL = { tau: 0.42, T: 8, lambda: 0.8, floor: 0.02, small: 40 } /* v1.0-D 시험으로 고른 값 (z 점수 · 장면 수에 맞춘 온도 · 감쇠): 가상 300곳 × 뽑기 2000번에서 장르에 맞는 주제 91% · 286곳 사용 / 3곳이면 같은 곡 20번에 3종 모두(300/300) · 연달아 같은 장면 평균 3.2번 */
 // 곡 특징 f = { energy 0–1, bpm, mood, genres: { 장르: 비중 } } × 장면 분위기 m = { energy, bpm: [lo, hi], moods: [], genres: [] }
 export function score(m, f) {
   if (!m) return 0
@@ -32,7 +32,7 @@ export function simQ(a, b) { if (!a || !b) return 0; if (a.id === b.id || (a.the
 export function scoresOf(scenes, f, k = 10) { prepare(scenes); const p = f.p || songDist(f), raw = scenes.map((s) => bridge(p, qOf(s))), rT = topMean(raw, Math.min(k, scenes.length)), c = raw.map((x, i) => 2 * x - rT - scenes[i]._rA), m = c.reduce((a, b) => a + b, 0) / c.length, sd = Math.sqrt(c.reduce((a, b) => a + (b - m) ** 2, 0) / c.length) || 1; return c.map((x, i) => (x - m) / sd + ((f.boost && f.boost[scenes[i].theme]) || 0)) } /* boost: 추천 취향(좋아한 장면 주제) 가산점 */ /* z 점수: 장면이 3곳이든 3000곳이든 같은 온도가 통해요 */
 // st = { n: 재생 횟수, last: { id: 마지막으로 고른 n }, prev: id } (저장해 두면 다음에도 이어져요)
 export function probs(scenes, f, st = { n: 0, last: {}, prev: null }, o = SEL) {
-  const prev = scenes.find((s) => s.id === st.prev), sc = scoresOf(scenes, f), z = scenes.map((s, i) => (sc[i] - o.lambda * (prev ? simQ(s, prev) : 0) /* 직전 장면 자신도 닮음 1 → 같은 장면 반복에 벌점 */) / o.tau), mx = Math.max(...z)
+  const prev = scenes.find((s) => s.id === st.prev), sc = scoresOf(scenes, f), tau = o.tau * Math.max(1, Math.sqrt((o.small || 40) / scenes.length)), z = scenes.map((s, i) => (sc[i] - o.lambda * (prev ? simQ(s, prev) : 0) /* 직전 장면 자신도 닮음 1 → 같은 장면 반복에 벌점 */) / tau) /* 장면이 적을수록 온도를 높여 z 간격을 좁혀요 (3곳 → ×2) */, mx = Math.max(...z)
   const T = o.T * Math.max(1, 24 / scenes.length), floor = o.floor * Math.min(1, scenes.length / 40) /* 장면이 적을수록 방금 본 장면을 더 오래 · 더 강하게 피해요 (3곳 → 감쇠 8배 · 하한 1/13) */
   const p = scenes.map((s, i) => { const dt = st.last[s.id] == null ? Infinity : st.n - st.last[s.id]; return Math.exp(z[i] - mx) * Math.max(floor, 1 - Math.exp(-dt / T)) })
   const sum = p.reduce((a, b) => a + b, 0) || 1; return p.map((x) => x / sum)
