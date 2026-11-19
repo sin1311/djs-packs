@@ -115,9 +115,11 @@ async function build(s) {
   if (!cal || cal.inl < 0.15) { log('지면을 찾지 못했어요', s.id, cal && +cal.inl.toFixed(3)); return null } /* 실제 AI 깊이는 합성보다 거칠어요: 0.15~0.3 은 "약한 지면"으로 살리고 앱에서 이동 폭을 줄여요 */
   const r = toMetric(g, cal)
   if (pv.boxes) { /* 사생활 2판: 실제 크기로 거른 얼굴만 얼굴 모양대로 알맞게 흐리고, 번호판은 빈 판으로. 흐릴 곳이 너무 많으면 장면을 빼요 */
-    const fk = faceKeep(pv.boxes, r, W, H), pk = plateKeep(pv.cands || [], r, W, H, { h }), load = privacyLoad([...fk, ...pk], W, H)
+    const dq = s.desc ? (await import('../src/scene/descriptors.js')).unpack(s.desc) : null, IX = dq && (await import('../src/scene/descriptors.js')).IDX
+    const indoor = dq ? ['place:room', 'place:cafe', 'place:club', 'place:hall', 'place:temple'].reduce((a, k) => a + (dq[IX[k]] || 0), 0) > 0.5 : false /* 5회차: 실내 스튜디오 · 작업장 무늬에 빈 판이 8곳씩 → 실내(방 · 카페 · 클럽 · 홀 · 성당)는 번호판을 찾지 않아요 (주차장 · 터널은 찾아요) */
+    const fk = faceKeep(pv.boxes, r, W, H), pk = indoor ? [] : plateKeep(pv.cands || [], r, W, H, { h }), load = privacyLoad([...fk, ...pk], W, H)
     if (load.frac > 0.02 || load.n > 20) { log('흐릴 곳이 너무 많아 뺐어요', s.id, JSON.stringify({ frac: +load.frac.toFixed(4), n: load.n })); return null }
-    rgb = plateBlank(anonBlur(rgb, W, H, fk), W, H, pk); pv.faces = fk.length; pv.plates = pk.length; pv.note = `얼굴 후보 ${pv.boxes.length}곳 중 실제 크기가 맞는 ${fk.length}곳을 알맞게 흐림 · 번호판 후보 ${(pv.cands || []).length}곳 중 ${pk.length}곳은 빈 판으로`; pv.load = +load.frac.toFixed(4)
+    rgb = plateBlank(anonBlur(rgb, W, H, fk), W, H, pk); pv.faces = fk.length; pv.plates = pk.length; pv.note = `얼굴 후보 ${pv.boxes.length}곳 중 실제 크기가 맞는 ${fk.length}곳을 알맞게 흐림 · ` + (indoor ? '실내라 번호판은 찾지 않음' : `번호판 후보 ${(pv.cands || []).length}곳 중 ${pk.length}곳은 빈 판으로`); pv.load = +load.frac.toFixed(4)
   }
   const rep = { id: s.id, depth: how, ground: { inliers: +cal.inl.toFixed(3), S: +cal.S.toFixed(5), T: +cal.T.toFixed(5), h }, privacy: { faces: pv.faces, plates: pv.plates, review: !!pv.review, note: pv.note, load: pv.load }, level: lev && { tilt: lev.tilt, conf: lev.conf, applied: lev.level, manh: lev.manh } }
   if (truth) { const e = []; for (let i = 0; i < r.length; i += 7) if (Number.isFinite(truth[i]) && truth[i] < 60) e.push(Math.abs(r[i] / truth[i] - 1)); e.sort((x, y) => x - y); rep.calErr = { median: +e[e.length >> 1].toFixed(4), p90: +e[(e.length * 0.9) | 0].toFixed(4) } }
