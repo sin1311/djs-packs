@@ -63,3 +63,17 @@ export function buildLDI(rgb, r, W, H, { layers = 3, band = 7, far = 400, minGap
   }
   return { layers: out, cuts: cuts.map(Math.exp), cl }
 }
+/* 장면마다 카메라가 움직여도 되는 거리 (시차 예산). 카메라가 t 만큼 움직이면 거리 Z₁ · Z₂ 인 이웃 두 점은 화면에서
+   f · t · |1/Z₁ − 1/Z₂| 화소만큼 벌어져요. 같은 층 안에서 이어진 이웃(둘 다 불투명)의 이 값이 크면 그 사이 삼각형이 고무처럼 늘어나요.
+   그 큰 쪽(99.5 백분위 D)을 ε 화소 안에 묶어 t = ε / (f · D), [lo, hi] 로 잘라요. f ≈ 1250 화소(1920 화면 · 시야 75°).
+   메쉬 꼭짓점 간격쯤(4화소)마다 재요. */
+export function parallaxBudget(layers, W, H, { f = 1250, eps = 6, lo = 0.08, hi = 0.3, step = 4 } = {}) {
+  const ds = []
+  for (const L of layers) for (let y = step; y < H - step; y += step) for (let x = 0; x < W; x += step) {
+    const i = y * W + x, a = L.rgba[i * 4 + 3]; if (a < 200) continue
+    for (const j of [y * W + ((x + step) % W), (y + step) * W + x]) { if (L.rgba[j * 4 + 3] < 200) continue; const r1 = L.r[i], r2 = L.r[j]; if (!(r1 > 0 && r2 > 0) || r1 > 300 || r2 > 300) continue; ds.push(Math.abs(1 / r1 - 1 / r2)) }
+  }
+  if (!ds.length) return { t: hi, D: 0 }
+  ds.sort((p, q) => p - q); const D = ds[Math.floor(ds.length * 0.995)], t = D > 0 ? eps / (f * D) : hi
+  return { t: +Math.max(lo, Math.min(hi, t)).toFixed(3), D: +D.toFixed(5) }
+}

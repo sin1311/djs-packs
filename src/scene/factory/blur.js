@@ -70,3 +70,54 @@ export function plateKeep(cands, r, W, H, { h = 1.6, maxR = 8, lo = 0.15, hi = 1
   }
   out.sort((a, b) => (b.score || 0) - (a.score || 0)); return out.slice(0, maxN)
 }
+/* ---- 사생활 2판 (2026-11-19: "모자이크가 너무 많아 그림을 알아보기 힘들어요") ----
+   · 얼굴: 누구인지 알아보는 정보는 얼굴 폭당 대략 8~16 주기의 공간 주파수에 있어요. 가우스 σ = 얼굴 폭/6 이면
+     반값 차단 주파수가 얼굴 폭당 1 주기 아래로 내려가 신원 정보는 사라지고, 얼굴 모양에 딱 맞는 타원만 바뀌어요
+     (예전: 상자 1.4배 + 여백 25% + 블록 평균 + 가우스 두 번 → 주변까지 크게 뭉갰어요).
+     흐린 뒤 작은 잡음(±2.5)을 더해 역합성곱(되살리기) 공격을 막아요 — 블록 모자이크는 오히려 되살리기에 약해요.
+   · 번호판: 흐리는 대신 "빈 판"으로 — 상자 바로 바깥 테두리 화소로 쿤스 패치(초한 보간)를 채워요
+     P(s,t) = (1−t)·위(s) + t·아래(s) + (1−s)·왼(t) + s·오른(t) − 네 귀퉁이 쌍선형. 글자 정보는 0, 조명 기울기는 그대로. */
+const hashN = (x, y) => { let h = (x * 374761393 + y * 668265263) | 0; h = (h ^ (h >>> 13)) * 1274126177; return (((h ^ (h >>> 16)) >>> 0) / 4294967296 - 0.5) * 5 }
+export function anonBlur(rgb, W, H, boxes, { ch = 3, wrap = true, div = 6, noise = true } = {}) {
+  const out = rgb.slice(), X = (x) => (wrap ? ((x % W) + W) % W : Math.max(0, Math.min(W - 1, x)))
+  for (const b of boxes) {
+    const sig = Math.max(1, Math.min(b.w, b.h) / div), pad = Math.ceil(sig * 3), x0 = Math.floor(b.x - pad), y0 = Math.max(0, Math.floor(b.y - pad)), x1 = Math.ceil(b.x + b.w + pad), y1 = Math.min(H, Math.ceil(b.y + b.h + pad)), bw = x1 - x0, bh = y1 - y0
+    if (bw < 2 || bh < 2) continue
+    const buf = new Float32Array(bw * bh * ch); for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) { const i = ((y0 + y) * W + X(x0 + x)) * ch; for (let c = 0; c < ch; c++) buf[(y * bw + x) * ch + c] = rgb[i + c] }
+    const bl = gauss(buf, bw, bh, ch, sig), cx = b.x + b.w / 2 - x0, cy = b.y + b.h / 2 - y0, rx = b.w / 2, ry = b.h / 2
+    for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) {
+      const e = Math.hypot((x - cx) / rx, (y - cy) / ry), m = e < 0.9 ? 1 : e > 1.1 ? 0 : (1.1 - e) / 0.2; if (m <= 0) continue
+      const xx = X(x0 + x), i = ((y0 + y) * W + xx) * ch, nz = noise ? hashN(xx, y0 + y) : 0
+      for (let c = 0; c < ch; c++) out[i + c] = Math.max(0, Math.min(255, Math.round(rgb[i + c] * (1 - m) + (bl[(y * bw + x) * ch + c] + nz) * m)))
+    }
+  }
+  return out
+}
+export function plateBlank(rgb, W, H, boxes, { ch = 3, wrap = true, grow = 0.12 } = {}) {
+  const out = rgb.slice(), X = (x) => (wrap ? ((x % W) + W) % W : Math.max(0, Math.min(W - 1, x)))
+  for (const b0 of boxes) {
+    const gx = b0.w * grow, gy = b0.h * grow * 2, x0 = Math.floor(b0.x - gx), x1 = Math.ceil(b0.x + b0.w + gx), y0 = Math.max(1, Math.floor(b0.y - gy)), y1 = Math.min(H - 2, Math.ceil(b0.y + b0.h + gy)), bw = x1 - x0, bh = y1 - y0
+    if (bw < 3 || bh < 3) continue
+    const px = (x, y, c) => rgb[(y * W + X(x)) * ch + c] /* 원본 테두리 화소 (상자 바로 바깥) */
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+      const s = (x - x0) / bw, t = (y - y0) / bh, edge = Math.min(x - x0, x1 - x, y - y0, y1 - y), m = Math.min(1, (edge + 0.5) / 1.5), i = (y * W + X(x)) * ch, nz = hashN(X(x), y) * 0.6
+      for (let c = 0; c < ch; c++) {
+        const top = px(x, y0 - 1, c), bot = px(x, y1 + 1, c), lef = px(x0 - 1, y, c), rig = px(x1 + 1, y, c)
+        const P = (1 - t) * top + t * bot + (1 - s) * lef + s * rig - ((1 - s) * (1 - t) * px(x0 - 1, y0 - 1, c) + s * (1 - t) * px(x1 + 1, y0 - 1, c) + (1 - s) * t * px(x0 - 1, y1 + 1, c) + s * t * px(x1 + 1, y1 + 1, c))
+        out[i + c] = Math.max(0, Math.min(255, Math.round(rgb[i + c] * (1 - m) + (P + nz) * m)))
+      }
+    }
+  }
+  return out
+}
+/* 얼굴 실제 크기 검사 (깊이를 안 뒤): 얼굴 폭 = 거리 r × 상자 폭 각도. 사람 얼굴(+ 여유)은 0.08~0.45 m — 벗어나면 무늬로 봐요.
+   깊이가 없거나(하늘 · 무한) 이상하면 남겨요 (사생활 쪽으로 기울여요) */
+export function faceKeep(boxes, r, W, H, { lo = 0.08, hi = 0.45 } = {}) {
+  return boxes.filter((b) => { const cx = Math.round(((b.x + b.w / 2) % W + W) % W), cy = Math.max(0, Math.min(H - 1, Math.round(b.y + b.h / 2))), rr = r ? r[cy * W + cx] : NaN; if (!Number.isFinite(rr) || rr > 300) return true; const lat = (0.5 - (cy + 0.5) / H) * Math.PI, wm = rr * Math.cos(lat) * (b.w / W) * 2 * Math.PI; return wm >= lo && wm <= hi })
+}
+/* 흐릴 곳이 너무 많은 장면: 눈높이 띠(위도 ±35°) 안에서 흐릴 넓이 비율 · 개수 → 주 목록에서 빼요 (후보는 충분해요) */
+export function privacyLoad(boxes, W, H, { band = 35 } = {}) {
+  const y0 = H * (0.5 - band / 180), y1 = H * (0.5 + band / 180); let a = 0, n = 0
+  for (const b of boxes) { const yy0 = Math.max(y0, b.y), yy1 = Math.min(y1, b.y + b.h); if (yy1 <= yy0) continue; a += b.w * (yy1 - yy0) * Math.PI / 4; n++ }
+  return { frac: a / (W * (y1 - y0)), n }
+}

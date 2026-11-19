@@ -14,6 +14,7 @@ on:
       resume: { description: '이어서 모으기 (기존 목록에 더해요 · 끄면 처음부터 새 목록)', type: boolean, default: true } # 체크 상자 (3회차: 글자 칸이라 true 가 아닌 값이 들어가 이전 목록이 빠졌어요)
       size: { description: '등장방형 가로 화소', default: '2048' }
       shots: { description: '인서트 컷 수 (멋진 차 · 사람들의 일상 · 분위기 순간 사진 · 0 이면 안 모아요)', default: '200' }
+      rebuild: { description: '기존 장면 다시 만들기 (수평 맞추기 · 알맞은 흐림 · 번호판 빈 판 · 시차 예산 · 가짜 360° 빼기)', type: boolean, default: false }
 permissions:
   contents: write
 concurrency:
@@ -48,7 +49,8 @@ jobs:
           EX=""; GP=""; if [ -f prev/index.json ]; then EX="--existing prev/index.json"; GP="--gaps prev/gaps.json"; fi
           node scripts/scene-mass.mjs --stage catalog --target "${{ github.event.inputs.target }}" --shots "${{ github.event.inputs.shots || '200' }}" $GP
           node scripts/scene-mass.mjs --stage gate --clip --conc 8
-          node scripts/scene-mass.mjs --stage curate --total "${{ github.event.inputs.total }}" --shots "${{ github.event.inputs.shots || '200' }}" $EX
+          RB=""; [ "${{ github.event.inputs.rebuild }}" = "true" ] && RB="--rebuild true"
+          node scripts/scene-mass.mjs --stage curate --total "${{ github.event.inputs.total }}" --shots "${{ github.event.inputs.shots || '200' }}" $EX $RB
           node scripts/scene-mass.mjs --stage skies --out out/skies
           cat work/gaps.json | head -c 3000
       - uses: actions/upload-artifact@v4
@@ -134,7 +136,7 @@ jobs:
           EX=""; [ -f prev/index.json ] && EX="--existing prev/index.json"
           HF=""; [ -n "$HF_TOKEN" ] && [ -n "${{ github.event.inputs.hf_repo }}" ] && HF="--base-hf ${{ github.event.inputs.hf_repo }}"
           node scripts/scene-mass.mjs --stage merge --partsDir out $EX $HF --out out/scenes
-          if [ -f prev/index.json ] && [ "${{ github.event.inputs.resume }}" != "false" ]; then node -e "const a=require('./prev/index.json'),b=require('./out/scenes/index.json');const n=(a.scenes||[]).length;if(b.scenes.length<n){console.error('합친 목록('+b.scenes.length+')이 이전 목록('+n+')보다 작아요 — 올리지 않고 멈춰요');process.exit(1)}"; fi # 안전장치: 이어서 모으기에서 장면이 줄면 올리지 않아요
+          if [ -f prev/index.json ] && [ "${{ github.event.inputs.resume }}" != "false" ]; then node -e "const a=require('./prev/index.json'),b=require('./out/scenes/index.json');const n=(a.scenes||[]).length,rb='${{ github.event.inputs.rebuild }}'==='true',lim=rb?Math.floor(n*0.6):n;if(b.scenes.length<lim){console.error('합친 목록('+b.scenes.length+')이 이전 목록('+n+')보다 너무 작아요 — 올리지 않고 멈춰요');process.exit(1)}"; fi # 안전장치: 이어서 모으기에서 장면이 줄면 올리지 않아요 (다시 만들기는 새 기준 탈락으로 40% 까지 줄 수 있어요)
           mkdir -p site && cp out/scenes/index.json work/gaps.json site/ && cp -r out/skies site/skies && cp README.md site/README.md
           git config --global user.name 'github-actions[bot]'; git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           (cd site && git init -q -b scenes && git add -A && git commit -q -m "장면 목록 (회차 ${{ github.run_number }})" && for k in 1 2 3 4; do git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" scenes && break; echo "목록 올리기 다시 ($k)"; sleep $((k * 15)); done)

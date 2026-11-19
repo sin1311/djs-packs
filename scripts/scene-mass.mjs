@@ -12,6 +12,7 @@ import { mkdir, writeFile, readFile, readdir, stat } from 'node:fs/promises'
 import { join, dirname } from 'node:path'
 import { SOURCES, UA, isPano, fetchRetry } from '../src/scene/factory/sources.js'
 import { gate } from '../src/scene/factory/quality.js'
+import { analyzePano } from '../src/scene/factory/level.js'
 import { SHOT_SOURCES, shotQuota } from '../src/scene/factory/shots.js'
 import { dedupe, curate, gapTerms } from '../src/scene/factory/curate.js'
 import { checkLicense } from '../src/scene/license.js'
@@ -65,12 +66,15 @@ async function gateStage() {
     const { data, info } = await sh.resize(1024, shot ? Math.max(2, Math.round(1024 * (m0.height || 640) / (m0.width || 1024))) : 512, { fit: 'fill' }).removeAlpha().raw().toBuffer({ resolveWithObject: true }), rgb = new Uint8Array(data)
     if (shot && c.src === 'openverse' && m0.width) { c.w = m0.width; c.h = m0.height } /* Openverse 는 원본을 받아 재요 (목록의 크기가 비어 있기도 해요) */
     const g = gate(rgb, info.width, info.height, { w: c.w, h: c.h }, shot ? { shot: true, minW: c.src === 'openverse' ? 1000 : 2400, blurMin: 25 /* 배경이 흐린(보케) 사진이 많아요 */ } : { minW: c.sky ? 2000 : 4000, sky: !!c.sky }); c.q = g.score; c.hash = g.hash; c.stats = g.stats; c.why = g.why; c.pass = g.pass
+    if (!shot && !c.sky && info.width === 1024 && info.height === 512) { const a = analyzePano(rgb, 1024, 512); c.pano = a; if (a.conf > 0.5 && a.manh != null && a.manh < 0.18) { c.pass = false; c.why = [...(c.why || []), `세로로 늘린 가짜 360° 같아요 (세로선 ${a.conf} · 직선 맞춤 ${a.manh})`] } } /* level.js: 진짜 등장방형이면 세계의 직선이 구 위 큰 원에 놓여요 */
     const cs = clip ? await clip(rgb, info.width, info.height, { flat: shot }) : null, kw = kwScores(c.text); if (cs) for (let i = 0; i < N; i++) cs[i] += kw[i] * 0.15
     const d = sceneDist({ clip: cs || kw, stats: g.stats }); c.desc = pack(d); c.theme = shot ? c.sub : THEME_OF(d)
     out.push(c)
   })
   log('관문:', out.length, '/', cands.length, '받음 · 통과', out.filter((c) => c.pass).length); await wr(join(WORK, 'scored.json'), out)
   const by = {}; for (const c of cands) { const key = c.kind === 'shot' ? c.src + ' 컷' : c.src, b = (by[key] = by[key] || { n: 0, got: 0, pass: 0, err: {} }); b.n++; if (c._err) { const k = c._err.split(' ').slice(0, 2).join(' '); b.err[k] = (b.err[k] || 0) + 1 } else if (out.includes(c)) { b.got++; if (c.pass) b.pass++ } }
+  { const P = out.filter((c) => c.pano), q = (a, f) => { const v = a.map(f).filter((x) => x != null).sort((x, y) => x - y); return v.length ? [0.5, 0.9, 0.99].map((p) => v[Math.min(v.length - 1, Math.floor(v.length * p))]).join(' / ') : '-' }
+    log('수평 · 가짜 360°:', P.length, '장 잼 · 기울기(도) 중앙/90%/99%', q(P, (c) => c.pano.tilt), '· 바로잡음', P.filter((c) => c.pano.level).length, '· 세로선 비율', q(P, (c) => c.pano.conf), '· 직선 맞춤', q(P, (c) => c.pano.manh), '· 가짜로 뺌', P.filter((c) => (c.why || []).some((w) => /가짜 360/.test(w))).length) }
   for (const [k, b] of Object.entries(by)) log('관문 ·', k, `후보 ${b.n} · 받음 ${b.got} · 통과 ${b.pass}`, Object.keys(b.err).length ? '· 실패 ' + JSON.stringify(b.err) : '') /* 2회차: 출처별 숫자가 없어 위키미디어 전멸을 늦게 알았어요 */
 }
 async function curateStage() {
@@ -83,7 +87,16 @@ async function curateStage() {
   const exShots = new Set((ex.shots || []).map((x) => x.id)), quota = A.shots != null && A.shots !== '1' ? +A.shots : shotQuota(room), shots = []
   const subs = ['car', 'people', 'moment']; for (const sb of subs) { const pool_ = shotsAll.filter((c) => c.sub === sb && !exShots.has(c.id)); shots.push(...curate(pool_, { total: Math.round(quota / subs.length), size: Math.round(quota / subs.length) }).picked) }
   log('컷 선별:', shots.length, '/', shotsAll.length, JSON.stringify(shots.reduce((o, c) => ((o[c.sub] = (o[c.sub] || 0) + 1), o), {})))
-  await wr(join(WORK, 'selected.json'), [...picked, ...shots].map(({ d, ...c }) => c)); await wr(join(WORK, 'gaps.json'), { gaps, terms: gapTerms(gaps) }); await wr(join(WORK, 'skies.json'), skies)
+  /* 다시 만들기 (--rebuild): 이미 있는 장면을 새 방식(수평 맞추기 · 사생활 2판 · 시차 예산)으로 다시 만들어요.
+     출처에서 다시 찾은 것 중 새 관문을 통과하면 다시 만들고, 떨어지면(가짜 360° 등) 목록에서 빼요. 출처에서 못 찾은 것은 그대로 둬요 */
+  const re = []
+  if (A.rebuild && A.rebuild !== 'false' && ex.scenes.length) {
+    const byId = new Map(all.filter((c) => !c.sky && c.kind !== 'shot').map((c) => [c.id, c])), dropped = []; let gone = 0
+    for (const x of ex.scenes) { const c = byId.get(x.id); if (!c) { gone++; continue } if (c.pass) re.push(c); else dropped.push({ id: x.id, why: (c.why || []).join('; ').slice(0, 120) }) }
+    log('다시 만들기:', re.length, '곳 · 새 관문에서 빠짐', dropped.length, '곳 · 출처에서 못 찾아 그대로', gone, '곳'); for (const d of dropped.slice(0, 8)) log('  빠짐', d.id, d.why)
+    await wr(join(WORK, 'rebuild.json'), { rebuild: re.map((c) => c.id), dropped })
+  }
+  await wr(join(WORK, 'selected.json'), [...re, ...picked, ...shots].map(({ d, ...c }) => c)); await wr(join(WORK, 'gaps.json'), { gaps, terms: gapTerms(gaps) }); await wr(join(WORK, 'skies.json'), skies)
 }
 async function buildStage() {
   const sel = await rd(join(WORK, 'selected.json'), []), [i, n] = String(A.shard || '0/1').split('/').map(Number), mine = sel.filter((_, k) => k % n === i), out = A.out || `out/shard-${i}`
@@ -101,7 +114,8 @@ async function mergeStage() {
   const dir = A.partsDir || 'out', files = [], walk = async (d) => { for (const f of await readdir(d)) { const p = join(d, f); if ((await stat(p)).isDirectory()) await walk(p); else if (f === 'part.json') files.push(p) } }; await walk(dir)
   const scenes = [], shots = [], hf = A['base-hf'] /* 예: 사용자/djs-scenes → https://huggingface.co/datasets/사용자/djs-scenes/resolve/main/<조각>/ */
   for (const f of files) { const shard = dirname(f).split('/').pop(); for (const s of await rd(f, [])) (s.kind === 'shot' ? shots : scenes).push({ ...s, ...(hf ? { base: `https://huggingface.co/datasets/${hf}/resolve/main/${shard}/` } : { ref: shard }) }) }
-  if (A.existing) { const ex = await rd(A.existing, { scenes: [] }), have = new Set([...scenes, ...shots].map((x) => x.id)); for (const x of ex.scenes) if (!have.has(x.id)) scenes.push(x); for (const x of ex.shots || []) if (!have.has(x.id)) shots.push(x); log('기존 장면 합침:', ex.scenes.length, '· 컷', (ex.shots || []).length) } /* 이어서 모으기: 예전 장면 그대로 */
+  if (A.existing) { const ex = await rd(A.existing, { scenes: [] }), have = new Set([...scenes, ...shots].map((x) => x.id)), rb = await rd(join(WORK, 'rebuild.json'), null)
+    if (rb) { const drop = new Set([...rb.dropped.map((d) => d.id), ...rb.rebuild.filter((id) => !have.has(id))]); ex.scenes = ex.scenes.filter((x) => !drop.has(x.id)); log('다시 만들기: 새로 바꿈', rb.rebuild.filter((id) => have.has(id)).length, '곳 · 목록에서 뺌', drop.size, '곳 (새 관문 탈락', rb.dropped.length, '· 다시 만들기 실패', drop.size - rb.dropped.length, ')') } /* 실패(지면 · 흐림 많음 등)는 옛 장면도 빼요 — 새 기준에 못 미쳐요 */ for (const x of ex.scenes) if (!have.has(x.id)) scenes.push(x); for (const x of ex.shots || []) if (!have.has(x.id)) shots.push(x); log('기존 장면 합침:', ex.scenes.length, '· 컷', (ex.shots || []).length) } /* 이어서 모으기: 예전 장면 그대로 */
   const skiesBase = A['skies-base'] || ''
   const index = { format: 'djs-scenes/1', ...(skiesBase ? { skiesBase } : {}), made: new Date().toISOString().slice(0, 10), count: scenes.length, scenes, shots, skies: await rd(join(dir, 'skies', 'skies.json'), []) }
   await wr(join(A.out || 'out/scenes', 'index.json'), index); log('합치기:', scenes.length, '장면 ·', shots.length, '컷 ·', index.skies.length, '하늘 →', join(A.out || 'out/scenes', 'index.json'))

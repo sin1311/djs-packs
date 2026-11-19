@@ -15,8 +15,9 @@ import { UA, fetchRetry } from '../src/scene/factory/sources.js'
 import { SYNTH, renderSynth } from '../src/scene/factory/synth.js'
 import { faceRGB, simDepthFaces, alignFaces, mergeFaces, FOV } from '../src/scene/factory/depth.js'
 import { fitGroundPano, toMetric } from '../src/scene/factory/ground.js'
-import { buildLDI } from '../src/scene/factory/ldi.js'
-import { blurBoxes, plateCandidates, plateKeep, yunetDecode } from '../src/scene/factory/blur.js'
+import { buildLDI, parallaxBudget } from '../src/scene/factory/ldi.js'
+import { plateCandidates, plateKeep, yunetDecode, anonBlur, plateBlank, faceKeep, privacyLoad } from '../src/scene/factory/blur.js'
+import { analyzePano, levelRotation, rotateEquirect } from '../src/scene/factory/level.js'
 import { faceTiles, closeFace, mergeBoxes, normDisp, shotPlates } from '../src/scene/factory/shotkit.js'
 import { checkLicense, attribution } from '../src/scene/license.js'
 import { faceDir, uvOf } from '../src/scene/geom.js'
@@ -73,20 +74,16 @@ async function loadRGB(s) {
 // 얼굴(YuNet) · 번호판(후보) 찾기 → 등장방형 상자. 합성 장면은 사람 · 번호판이 없어서 건너뛰어요(보고서에 그렇게 적어요)
 // 번호판: 읽을 수 있는 것만 흐려요 — 수평선 아래 35° ~ 위 5° (땅 근처) · 거리 8m 안 (2048 파노라마에서 그보다 먼 번호판은 몇 화소라 읽을 수 없어요).
 //  첫 실제 장면에서 휴리스틱 후보 159곳을 다 흐렸더니 창문 · 유리 격자가 번졌어요 → 이렇게 걸러요
-function platePass(rgb, r, cands, h) { /* 거리 · 높이 · 실제 폭으로 거른 번호판만 흐려요 (src/scene/factory/blur.js plateKeep) */
-  const keep = plateKeep(cands, r, W, H, { h })
-  return { rgb: keep.length ? blurBoxes(rgb, W, H, keep) : rgb, n: keep.length }
-}
 async function privacy(s, rgb) {
   if (s.kind === 'synthetic') return { rgb, faces: 0, plates: 0, note: '합성 장면: 사람 · 번호판 없음 (생성)' }
   const boxes = [], d = [0, 0, 0], uv = [0, 0]; let faces = 0
   const toEq = (i, b, N) => { /* 면 상자 네 귀퉁이 → 등장방형 상자 */ const xs = [], ys = []; for (const [px, py] of [[b.x, b.y], [b.x + b.w, b.y], [b.x, b.y + b.h], [b.x + b.w, b.y + b.h]]) { faceDir(i, px, py, N, FOV, d); uvOf(d[0], d[1], d[2], uv); xs.push(uv[0] * W); ys.push(uv[1] * H) } let x0 = Math.min(...xs), x1 = Math.max(...xs); if (x1 - x0 > W / 2) { x0 = Math.max(...xs.filter((x) => x < W / 2)); x1 = Math.min(...xs.filter((x) => x >= W / 2)) + W; [x0, x1] = [x1 - W, x0] } return { x: x0, y: Math.min(...ys), w: x1 - x0, h: Math.max(...ys) - Math.min(...ys) } }
   if (A.face) {
     const ort = await import('onnxruntime-node'), sess = await ort.InferenceSession.create(A.face), S = 640
-    for (let i = 0; i < 6; i++) { const f = faceRGB(rgb, W, H, i, S), t = new Float32Array(3 * S * S); for (let p = 0; p < S * S; p++) for (let c = 0; c < 3; c++) t[c * S * S + p] = f[p * 3 + (2 - c)] /* BGR */; const out = await sess.run({ [sess.inputNames[0]]: new ort.Tensor('float32', t, [1, 3, S, S]) }); for (const b of yunetDecode(out, S)) { boxes.push(toEq(i, { x: b.x - b.w * 0.2, y: b.y - b.h * 0.2, w: b.w * 1.4, h: b.h * 1.4 }, S)); faces++ } }
+    for (let i = 0; i < 6; i++) { const f = faceRGB(rgb, W, H, i, S), t = new Float32Array(3 * S * S); for (let p = 0; p < S * S; p++) for (let c = 0; c < 3; c++) t[c * S * S + p] = f[p * 3 + (2 - c)] /* BGR */; const out = await sess.run({ [sess.inputNames[0]]: new ort.Tensor('float32', t, [1, 3, S, S]) }); for (const b of yunetDecode(out, S, { thr: 0.7 })) { boxes.push(toEq(i, { x: b.x - b.w * 0.075, y: b.y - b.h * 0.075, w: b.w * 1.15, h: b.h * 1.15 }, S)); faces++ } /* 상자는 얼굴에 딱 맞게 (예전 1.4배는 주변까지 뭉갰어요) · 문턱 0.7 */ }
   } else if (s.kind !== 'synthetic') log('경고: --face 모델이 없어 얼굴을 찾지 못했어요 → 이 장면은 사람 확인 목록에 올라가요')
   const N = 512, plates = []; if (!s.blurred) for (let i = 0; i < 6; i++) if (i !== 2) for (const b of plateCandidates(faceRGB(rgb, W, H, i, N), N, N)) plates.push({ ...toEq(i, b, N), score: b.score })
-  return { rgb: blurBoxes(rgb, W, H, boxes), faces, cands: plates, plates: 0, review: !A.face, note: '' } /* 번호판은 깊이를 안 뒤에 거리 · 높이로 걸러서 흐려요 (아래 platePass) */
+  return { rgb, boxes, faces, cands: plates, plates: 0, review: !A.face, note: '' } /* 찾기만 해요: 깊이를 안 뒤 실제 크기로 거르고 흐려요 (build) */
 }
 // 깊이: 실제 모델(Depth Anything V2 Small) 또는 합성 장면의 정답 흉내
 async function depthFaces(s, rgb, truth) {
@@ -108,19 +105,29 @@ async function encodeDist(r0) { /* 거리 → log 정규화 16비트 (R = 위 8�
 }
 async function build(s) {
   const t0 = Date.now(), lic = checkLicense(s); if (!lic.ok) { log('거절', s.id, lic.why); return null }
-  let { rgb, truth, h } = await loadRGB(s); const pv = await privacy(s, rgb); rgb = pv.rgb
+  let { rgb, truth, h } = await loadRGB(s), lev = null
+  if (s.kind !== 'synthetic') { /* 수평 맞추기: 기운 360 카메라 → 수평선이 물결쳐요. 1024×512 사본으로 위쪽 소실점을 재고 원본 구를 돌려요 (level.js) */
+    const sm = W === 1024 ? rgb : new Uint8Array(await (await img())(Buffer.from(rgb), { raw: { width: W, height: H, channels: 3 } }).resize(1024, 512, { fit: 'fill' }).raw().toBuffer())
+    lev = analyzePano(sm, 1024, 512); if (lev.level) rgb = rotateEquirect(rgb, W, H, levelRotation(lev.v))
+  }
+  const pv = await privacy(s, rgb)
   const N = FN, { faces, how } = await depthFaces(s, rgb, truth), ab = alignFaces(faces, N), g = mergeFaces(faces, ab, W, H, N), cal = fitGroundPano(g, W, H, { h })
   if (!cal || cal.inl < 0.15) { log('지면을 찾지 못했어요', s.id, cal && +cal.inl.toFixed(3)); return null } /* 실제 AI 깊이는 합성보다 거칠어요: 0.15~0.3 은 "약한 지면"으로 살리고 앱에서 이동 폭을 줄여요 */
-  const r = toMetric(g, cal), pp = platePass(rgb, r, pv.cands || [], h); rgb = pp.rgb; pv.plates = pp.n; if (pv.cands) pv.note = `번호판 후보 ${pv.cands.length}곳 중 읽을 수 있는 거리 · 높이의 ${pp.n}곳만 흐렸어요`
-  const rep = { id: s.id, depth: how, ground: { inliers: +cal.inl.toFixed(3), S: +cal.S.toFixed(5), T: +cal.T.toFixed(5), h }, privacy: { faces: pv.faces, plates: pv.plates, review: !!pv.review, note: pv.note } }
+  const r = toMetric(g, cal)
+  if (pv.boxes) { /* 사생활 2판: 실제 크기로 거른 얼굴만 얼굴 모양대로 알맞게 흐리고, 번호판은 빈 판으로. 흐릴 곳이 너무 많으면 장면을 빼요 */
+    const fk = faceKeep(pv.boxes, r, W, H), pk = plateKeep(pv.cands || [], r, W, H, { h }), load = privacyLoad([...fk, ...pk], W, H)
+    if (load.frac > 0.02 || load.n > 20) { log('흐릴 곳이 너무 많아 뺐어요', s.id, JSON.stringify({ frac: +load.frac.toFixed(4), n: load.n })); return null }
+    rgb = plateBlank(anonBlur(rgb, W, H, fk), W, H, pk); pv.faces = fk.length; pv.plates = pk.length; pv.note = `얼굴 후보 ${pv.boxes.length}곳 중 실제 크기가 맞는 ${fk.length}곳을 알맞게 흐림 · 번호판 후보 ${(pv.cands || []).length}곳 중 ${pk.length}곳은 빈 판으로`; pv.load = +load.frac.toFixed(4)
+  }
+  const rep = { id: s.id, depth: how, ground: { inliers: +cal.inl.toFixed(3), S: +cal.S.toFixed(5), T: +cal.T.toFixed(5), h }, privacy: { faces: pv.faces, plates: pv.plates, review: !!pv.review, note: pv.note, load: pv.load }, level: lev && { tilt: lev.tilt, conf: lev.conf, applied: lev.level, manh: lev.manh } }
   if (truth) { const e = []; for (let i = 0; i < r.length; i += 7) if (Number.isFinite(truth[i]) && truth[i] < 60) e.push(Math.abs(r[i] / truth[i] - 1)); e.sort((x, y) => x - y); rep.calErr = { median: +e[e.length >> 1].toFixed(4), p90: +e[(e.length * 0.9) | 0].toFixed(4) } }
-  const L = buildLDI(rgb, r, W, H, { layers: +(A.layers || 3) }), dir = join(OUT, s.id); await mkdir(dir, { recursive: true }); const files = {}, layers = []
+  const L = buildLDI(rgb, r, W, H, { layers: +(A.layers || 3) }), _pb = parallaxBudget(L.layers, W, H), dir = join(OUT, s.id); await mkdir(dir, { recursive: true }); const files = {}, layers = []
   for (let k = 0; k < L.layers.length; k++) {
     const c = await (await img())(Buffer.from(L.layers[k].rgba), { raw: { width: W, height: H, channels: 4 } }).webp({ quality: +(A.q || 82), alphaQuality: 90, effort: 6 }).toBuffer(), dd = await encodeDist(L.layers[k].r)
     const cn = `l${k}.webp`, dn = `l${k}-dist.png`; await writeFile(join(dir, cn), c); await writeFile(join(dir, dn), dd.buf); files[cn] = sha(c); files[dn] = sha(dd.buf); layers.push({ color: cn, dist: dn, rmin: dd.rmin, rmax: dd.rmax })
   }
-  const man = { format: 'djs-scene/1', id: s.id, name: s.name, kind: s.kind, label: s.kind === 'synthetic' ? '합성 시험 장면 · 실사 아님' : s.kind === 'reconstructed' ? '재구성 장면 · CC 자산' : '실제 장소 사진 · 깊이는 AI 추정', ...(s.desc ? { desc: s.desc, stats: s.stats } : {}), theme: s.theme, size: [W, H], distSize: [W / DS, H / DS], h, ground: { S: cal.S, T: cal.T, inl: cal.inl, ...(cal.inl < 0.3 ? { weak: true } : {}) }, cuts: L.cuts, layers, mood: s.mood, car: s.car ? { ahead: 9, side: s.theme === 'city' ? -1.8 : 0 } : null, sources: [{ title: s.title, author: s.author, license: lic.L, source: s.source, text: attribution(s) }], review: !!pv.review, files }
-  await writeFile(join(dir, 'manifest.json'), JSON.stringify(man, null, 1)); rep.ms = Date.now() - t0; rep.bytes = Object.keys(files).length; log(s.id, JSON.stringify(rep))
+  const man = { format: 'djs-scene/1', id: s.id, name: s.name, kind: s.kind, label: s.kind === 'synthetic' ? '합성 시험 장면 · 실사 아님' : s.kind === 'reconstructed' ? '재구성 장면 · CC 자산' : '실제 장소 사진 · 깊이는 AI 추정', ...(s.desc ? { desc: s.desc, stats: s.stats } : {}), theme: s.theme, size: [W, H], distSize: [W / DS, H / DS], h, ground: { S: cal.S, T: cal.T, inl: cal.inl, ...(cal.inl < 0.3 ? { weak: true } : {}) }, maxOff: _pb.t /* 시차 예산 (m) */, ...(lev ? { level: { tilt: lev.tilt, applied: lev.level } } : {}), cuts: L.cuts, layers, mood: s.mood, car: s.car ? { ahead: 9, side: s.theme === 'city' ? -1.8 : 0 } : null, sources: [{ title: s.title, author: s.author, license: lic.L, source: s.source, text: attribution(s) }], review: !!pv.review, files }
+  await writeFile(join(dir, 'manifest.json'), JSON.stringify(man, null, 1)); rep.maxOff = man.maxOff; rep.ms = Date.now() - t0; rep.bytes = Object.keys(files).length; log(s.id, JSON.stringify(rep))
   return { man, rep }
 }
 // --- 인서트 컷 (보통 사진: 멋진 차 · 사람들의 일상 · 곡 분위기에 맞는 순간) → djs-shot/1 ---
@@ -140,13 +147,14 @@ async function buildShot(s) {
       const tile = tl.s > 1 ? new Uint8Array((await sh(Buffer.from(rgb), { raw: { width: SW, height: SH, channels: 3 } }).resize(cw, chh, { fit: 'fill' }).raw().toBuffer())) : null
       for (let y = 0; y < Math.min(S, chh); y++) for (let x = 0; x < Math.min(S, cw); x++) { const i = tile ? (y * cw + x) * 3 : ((tl.y + y) * SW + tl.x + x) * 3, src = tile || rgb; for (let c = 0; c < 3; c++) t[c * S * S + y * S + x] = src[i + (2 - c)] /* BGR */ }
       const out = await sess.run({ [sess.inputNames[0]]: new ort.Tensor('float32', t, [1, 3, S, S]) })
-      for (const b of yunetDecode(out, S)) faces.push({ x: tl.x + (b.x - b.w * 0.2) * tl.s, y: tl.y + (b.y - b.h * 0.2) * tl.s, w: b.w * 1.4 * tl.s, h: b.h * 1.4 * tl.s, score: b.score })
+      for (const b of yunetDecode(out, S, { thr: 0.7 })) faces.push({ x: tl.x + (b.x - b.w * 0.075) * tl.s, y: tl.y + (b.y - b.h * 0.075) * tl.s, w: b.w * 1.15 * tl.s, h: b.h * 1.15 * tl.s, score: b.score })
     }
   } else log('경고: --face 모델이 없어 얼굴을 찾지 못했어요 → 이 컷은 사람 확인 목록에 올라가요')
   const fb = mergeBoxes(faces); if (closeFace(fb, SW, SH)) { log('컷 거절 (얼굴이 크게 나온 인물 사진)', s.id); return null }
   const pw = 1024, ph = Math.round(1024 * SH / SW), small = new Uint8Array(await sh(Buffer.from(rgb), { raw: { width: SW, height: SH, channels: 3 } }).resize(pw, ph, { fit: 'fill' }).raw().toBuffer()), k = SW / pw
   const plates = s.blurred ? [] : shotPlates(plateCandidates(small, pw, ph).map((b) => ({ x: b.x * k, y: b.y * k, w: b.w * k, h: b.h * k, score: b.score })), SW, SH)
-  rgb = blurBoxes(rgb, SW, SH, [...fb, ...plates], { wrap: false })
+  const ld = fb.reduce((a, b) => a + b.w * b.h * Math.PI / 4, 0) / (SW * SH); if (ld > 0.03) { log('컷 거절 (흐릴 곳이 너무 많아요)', s.id, +ld.toFixed(4)); return null }
+  rgb = plateBlank(anonBlur(rgb, SW, SH, fb, { wrap: false }), SW, SH, plates, { wrap: false }) /* 사생활 2판: 얼굴은 알맞게 흐리고 번호판은 빈 판으로 */
   let disp, how
   if (A.depth) {
     const ort = await import('onnxruntime-node'), sess = await ort.InferenceSession.create(A.depth), M = [0.485, 0.456, 0.406], SD = [0.229, 0.224, 0.225]
