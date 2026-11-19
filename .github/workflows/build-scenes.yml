@@ -54,6 +54,6 @@ jobs:
           du -sh out/*
           REPO="https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
           ls -d out/scenes-* > /dev/null 2>&1 || { echo "만든 장면이 없어요 — 위 로그의 실패 이유를 보세요"; exit 1; }
-          for d in out/scenes-*; do b=$(basename "$d"); cp README.md "$d/README.md"; (cd "$d" && git init -q -b "$b" && git add -A && git commit -q -m "장면 팩 $b" && git push -f "$REPO" "$b"); done
+          for d in out/scenes-*; do b=$(basename "$d"); cp README.md "$d/README.md"; (cd "$d" && git init -q -b "$b" && git add -A && git commit -q -m "장면 팩 $b" && for k in 1 2 3 4; do git push -f "$REPO" "$b" && break; echo "올리기 다시 ($k)"; sleep $((k * 15)); done); done
           cp README.md out/scenes/README.md
-          (cd out/scenes && git init -q -b scenes && git add -A && git commit -q -m "장면 목록" && git push -f "$REPO" scenes)
+          (cd out/scenes && git init -q -b scenes && git add -A && git commit -q -m "장면 목록" && for k in 1 2 3 4; do git push -f "$REPO" scenes && break; echo "목록 올리기 다시 ($k)"; sleep $((k * 15)); done)

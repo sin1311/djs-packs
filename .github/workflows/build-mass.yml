@@ -90,7 +90,7 @@ jobs:
             for k in 1 2 3 4 5; do huggingface-cli upload "${{ github.event.inputs.hf_repo }}" "$D" "$B" --repo-type dataset --commit-message "장면 $B" && break; sleep $((k * 20)); done
           else
             git config --global user.name 'github-actions[bot]'; git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-            cp README.md "$D/README.md"; (cd "$D" && git init -q -b "$B" && git add -A && git commit -q -m "장면 $B" && git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" "$B")
+            cp README.md "$D/README.md"; (cd "$D" && git init -q -b "$B" && git add -A && git commit -q -m "장면 $B" && for k in 1 2 3 4; do git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" "$B" && break; sleep $((k * 15)); done)
           fi
           mkdir -p parts/$B && cp $D/part.json parts/$B/part.json
       - uses: actions/upload-artifact@v4
@@ -121,5 +121,5 @@ jobs:
           node scripts/scene-mass.mjs --stage merge --partsDir out $EX $HF --out out/scenes
           mkdir -p site && cp out/scenes/index.json work/gaps.json site/ && cp -r out/skies site/skies && cp README.md site/README.md
           git config --global user.name 'github-actions[bot]'; git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          (cd site && git init -q -b scenes && git add -A && git commit -q -m "장면 목록 (회차 ${{ github.run_number }})" && git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" scenes)
+          (cd site && git init -q -b scenes && git add -A && git commit -q -m "장면 목록 (회차 ${{ github.run_number }})" && for k in 1 2 3 4; do git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" scenes && break; echo "목록 올리기 다시 ($k)"; sleep $((k * 15)); done)
           node -e "const x=require('./out/scenes/index.json');console.log('전체 장면',x.count,'· 하늘',x.skies.length)"
