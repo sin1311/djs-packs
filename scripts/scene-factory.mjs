@@ -104,11 +104,24 @@ async function encodeDist(r0) { /* 거리 → log 정규화 16비트 (R = 위 8�
   const a = Math.log(lo), b = Math.log(hi), px = Buffer.alloc(r.length * 3); for (let i = 0; i < r.length; i++) { const q = Math.round(Math.max(0, Math.min(1, (Math.log(Math.min(hi, Math.max(lo, r[i]))) - a) / (b - a))) * 65535); px[i * 3] = q >> 8; px[i * 3 + 1] = q & 255 }
   return { buf: await (await img())(px, { raw: { width: w, height: hh, channels: 3 } }).png({ compressionLevel: 9 }).toBuffer(), rmin: +lo.toFixed(4), rmax: +hi.toFixed(3) }
 }
+let _ps = null
+async function pandaG(rgb) { /* PanDA 출력 = 상대 깊이(0~1) → g = 1/깊이 (아핀 역깊이 꼴, 지면 맞춤이 기울기 · 절편을 맞춰요) */
+  const ort = await import('onnxruntime-node'); _ps ||= await ort.InferenceSession.create(A.panda)
+  const PW = 1008, PH = 504, im = new Uint8Array(await (await img())(Buffer.from(rgb), { raw: { width: W, height: H, channels: 3 } }).resize(PW, PH, { fit: 'fill' }).raw().toBuffer()), t = new Float32Array(3 * PW * PH), M = [0.485, 0.456, 0.406], SD = [0.229, 0.224, 0.225]
+  for (let p = 0; p < PW * PH; p++) for (let c = 0; c < 3; c++) t[c * PW * PH + p] = (im[p * 3 + c] / 255 - M[c]) / SD[c]
+  const o = await _ps.run({ [_ps.inputNames[0]]: new ort.Tensor('float32', t, [1, 3, PH, PW]) }), dd = o[_ps.outputNames[0]].data, g = new Float32Array(W * H)
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const fx = Math.min(PW - 1.001, Math.max(0, ((x + 0.5) * PW) / W - 0.5)), fy = Math.min(PH - 1.001, Math.max(0, ((y + 0.5) * PH) / H - 0.5)), x0 = Math.floor(fx), y0 = Math.floor(fy), ax = fx - x0, ay = fy - y0
+    const v = (dd[y0 * PW + x0] * (1 - ax) + dd[y0 * PW + x0 + 1] * ax) * (1 - ay) + (dd[(y0 + 1) * PW + x0] * (1 - ax) + dd[(y0 + 1) * PW + x0 + 1] * ax) * ay; g[y * W + x] = 1 / Math.max(1e-3, v) }
+  return g
+}
 async function build(s) {
   const t0 = Date.now(), lic = checkLicense(s); if (!lic.ok) { log('거절', s.id, lic.why); return null }
   let { rgb, truth, h } = await loadRGB(s), lev = null
   /* 깊이 먼저 → 수평 맞추기(3판: 지면 평면 g = w·d + T 의 법선 = 위, level.js groundUp; 안 되면 경계 방식) → 구와 깊이를 함께 돌려요 → 사생활 찾기 */
-  const N = FN, { faces, how } = await depthFaces(s, rgb, truth), ab = alignFaces(faces, N); let g = mergeFaces(faces, ab, W, H, N)
+  /* 깊이: PanDA-Small(등장방형 한 번 · 면 이음매 없음 · 2배 빠름, try-panda A/B) 먼저 → 지면 맞춤이 0.3 미만이면 6면 방식도 재서 지면이 더 잘 맞는 쪽 */
+  let g = null, how = ''
+  if (A.panda && !truth && !A['fake-depth']) { try { g = await pandaG(rgb); how = 'PanDA-Small (ONNX · CPU · 360° 한 번)'; const c0 = fitGroundPano(g, W, H, { h }); if (!c0 || c0.inl < 0.3) { const fd = await depthFaces(s, rgb, truth), g2 = mergeFaces(fd.faces, alignFaces(fd.faces, FN), W, H, FN), c2 = fitGroundPano(g2, W, H, { h }); if (c2 && (!c0 || c2.inl > c0.inl)) { g = g2; how = fd.how + ' (PanDA 지면 맞춤 ' + (c0 ? c0.inl.toFixed(2) : '없음') + ' → 6면)' } } } catch (e) { log('PanDA 실패 → 6면', s.id, String(e.message).slice(0, 80)); g = null } }
+  if (!g) { const fd = await depthFaces(s, rgb, truth); g = mergeFaces(fd.faces, alignFaces(fd.faces, FN), W, H, FN); how = fd.how }
   if (s.kind !== 'synthetic') {
     const gu = groundUp(g, W, H, { h }), okG = gu && gu.inl >= LEVEL_G.minInl && gu.tilt >= LEVEL_G.minTilt && gu.tilt <= LEVEL_G.maxApply
     let up = okG ? gu.up : null, how2 = okG ? 'ground' : ''

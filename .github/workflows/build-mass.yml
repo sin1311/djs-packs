@@ -35,6 +35,18 @@ jobs:
           npm init -y > /dev/null
           ONNXRUNTIME_NODE_INSTALL_CUDA=skip npm i sharp@0.33.5 onnxruntime-node@1.20.1 @huggingface/transformers@3.1.2
           node -e "require('sharp'); require('onnxruntime-node'); import('@huggingface/transformers').then(() => console.log('도구 확인: sharp · onnxruntime-node · transformers OK'))"
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - name: PanDA-Small → ONNX (360° 깊이 · Apache-2.0 · 면 이음매 없음)
+        continue-on-error: true
+        run: |
+          git clone --depth 1 https://github.com/caozidong/PanDA PanDA
+          pip install -q torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          pip install -q einops pyyaml opencv-python-headless onnx onnxscript safetensors matplotlib pillow
+          mkdir -p models && curl -fL -o models/panda_small.pth "https://huggingface.co/ZidongC/PanDA/resolve/main/panda_small.pth?download=true"
+          python scripts/export-panda.py "$(pwd)/models/panda_small.pth" && mkdir -p panda && mv models/panda_small.onnx panda/
+      - uses: actions/upload-artifact@v4
+        with: { name: panda, path: panda/, if-no-files-found: ignore }
       - name: 이어서 모으기 자료 (있으면)
         if: ${{ github.event.inputs.resume != 'false' }}
         run: |
@@ -82,8 +94,11 @@ jobs:
           mkdir -p models
           curl -fL -o models/dav2s.onnx https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/main/onnx/model.onnx
           curl -fL -o models/yunet.onnx https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with: { name: panda, path: panda/ }
       - name: 장면 만들기 (조각 ${{ matrix.shard }})
-        run: node scripts/scene-mass.mjs --stage build --shard ${{ matrix.shard }}/$SHARDS --out out/scenes-r${{ github.run_number }}-${{ matrix.shard }} --size "${{ github.event.inputs.size }}" --depth models/dav2s.onnx --face models/yunet.onnx
+        run: node scripts/scene-mass.mjs --stage build --shard ${{ matrix.shard }}/$SHARDS --out out/scenes-r${{ github.run_number }}-${{ matrix.shard }} --size "${{ github.event.inputs.size }}" --depth models/dav2s.onnx --face models/yunet.onnx $( [ -f panda/panda_small.onnx ] && echo --panda panda/panda_small.onnx )
       - name: 올리기 (Hugging Face 또는 GitHub 가지)
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
