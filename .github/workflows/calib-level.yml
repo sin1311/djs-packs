@@ -4,14 +4,15 @@ name: calib-level
 on:
   workflow_dispatch:
     inputs:
-      n: { description: '사진 수', default: '300' }
+      n: { description: '사진 수', default: '150' }
+      depth: { description: '깊이(지면 평면) 방식도 재기', type: boolean, default: true }
       tilts: { description: '기울기(도, 쉼표) — 0 은 반듯한 사진 그대로', default: '0,3,8' }
 permissions:
   contents: read
 jobs:
   calib:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -19,8 +20,11 @@ jobs:
       - name: 도구
         run: |
           npm init -y > /dev/null
-          npm i sharp@0.33.5
+          ONNXRUNTIME_NODE_INSTALL_CUDA=skip npm i sharp@0.33.5 onnxruntime-node@1.20.1
+          mkdir -p models && curl -fL -o models/dav2s.onnx https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/main/onnx/model.onnx
       - name: 보정
-        run: node scripts/scene-mass.mjs --stage calib-level --n "${{ github.event.inputs.n }}" --tilts "${{ github.event.inputs.tilts }}"
+        run: |
+          D=""; [ "${{ github.event.inputs.depth }}" != "false" ] && D="--depth models/dav2s.onnx"
+          node scripts/scene-mass.mjs --stage calib-level --n "${{ github.event.inputs.n }}" --tilts "${{ github.event.inputs.tilts }}" $D
       - uses: actions/upload-artifact@v4
         with: { name: calib-level, path: work/calib-level.json }

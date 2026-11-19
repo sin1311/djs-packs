@@ -132,3 +132,40 @@ export function analyzePano(rgb, W, H) {
   const E = edgeNormals(rgb, W, H), up = upVector2(E), man = up.ok ? manhattanScore(E, up.v) : { score: null, tot: 0 }
   return { tilt: +up.tilt.toFixed(2), conf: +up.conf.toFixed(3), v: up.v.map((x) => +x.toFixed(5)), level: up.ok && up.tilt > 0.4, halves: up.halves, manh: man.score == null ? null : +man.score.toFixed(3), edges: E.w.length }
 }
+/* 3판: 깊이로 수평 재기 (보정 결과: 경계 방식은 실제 파노라마에서 반듯한 사진도 중앙 3.8° 틀려 믿을 수 있는 경우가 0.3% 뿐).
+   병합 깊이 g ≈ S/r + T (아핀 역깊이). 지면은 평면: 방향 d 의 지면 점은 1/r = −(n·d)/h (n = 세계의 위, 카메라 높이 h)
+   → g = w·d + T, w = −(S/h)·n. 아래 반구 화소로 4개 수 (w, T) 를 RANSAC + 최소제곱 → n = −w/|w|, S = |w|·h.
+   반듯하다고 가정한 지금의 지면 맞춤(n = (0,1,0))의 일반화예요. 지면은 사진에서 넓어서 경계보다 훨씬 튼튼해요. */
+function solve4(M, y) { const A = M.map((r, i) => [...r, y[i]]); for (let c = 0; c < 4; c++) { let p = c; for (let r = c + 1; r < 4; r++) if (Math.abs(A[r][c]) > Math.abs(A[p][c])) p = r; if (Math.abs(A[p][c]) < 1e-12) return null; [A[c], A[p]] = [A[p], A[c]]; for (let r = 0; r < 4; r++) if (r !== c) { const f = A[r][c] / A[c][c]; for (let k = c; k < 5; k++) A[r][k] -= f * A[c][k] } } return A.map((r, i) => r[4] / r[i]) }
+export function groundUp(g, W, H, { h = 1.6, latMin = 3, latMax = 80, step = 4, tolK = 0.03, iters = 500, seed = 5, maxTilt = 20 } = {}) {
+  const P = [], Y = [], d = [0, 0, 0]
+  for (let y = 0; y < H; y += step) { const lat = (0.5 - (y + 0.5) / H) * 180; if (lat > -latMin || lat < -latMax) continue; for (let x = 0; x < W; x += step) { const v = g[y * W + x]; if (!Number.isFinite(v)) continue; dirOf((x + 0.5) / W, (y + 0.5) / H, d); P.push(d[0], d[1], d[2]); Y.push(v) } }
+  const n = Y.length; if (n < 50) return null
+  const med = Y.map(Math.abs).sort((a, b) => a - b)[n >> 1], tol = Math.max(1e-6, med * tolK), R = rnd(seed), cosMax = Math.cos((maxTilt * Math.PI) / 180)
+  const fit = (idx) => { const M = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], b = [0, 0, 0, 0]; for (const i of idx) { const r = [P[i * 3], P[i * 3 + 1], P[i * 3 + 2], 1]; for (let a = 0; a < 4; a++) { b[a] += r[a] * Y[i]; for (let c = 0; c < 4; c++) M[a][c] += r[a] * r[c] } } return solve4(M, b) }
+  const count = (p) => { let c = 0; for (let i = 0; i < n; i++) if (Math.abs(p[0] * P[i * 3] + p[1] * P[i * 3 + 1] + p[2] * P[i * 3 + 2] + p[3] - Y[i]) < tol) c++; return c }
+  const upOf = (p) => { const l = Math.hypot(p[0], p[1], p[2]); return l > 0 ? [-p[0] / l, -p[1] / l, -p[2] / l] : null }
+  let best = null, bc = -1
+  for (let k = 0; k < iters; k++) {
+    const idx = [0, 1, 2, 3].map(() => Math.floor(R() * n)); const M = idx.map((i) => [P[i * 3], P[i * 3 + 1], P[i * 3 + 2], 1]), p = solve4(M, idx.map((i) => Y[i])); if (!p) continue
+    const u = upOf(p); if (!u || u[1] < cosMax) continue /* 위가 위쪽 20° 안 · 지면은 카메라보다 아래 */
+    const c = count(p); if (c > bc) { bc = c; best = p }
+  }
+  if (!best) return null
+  for (let it = 0; it < 2; it++) { const idx = []; for (let i = 0; i < n; i++) if (Math.abs(best[0] * P[i * 3] + best[1] * P[i * 3 + 1] + best[2] * P[i * 3 + 2] + best[3] - Y[i]) < tol) idx.push(i); const p = fit(idx); if (p && upOf(p) && upOf(p)[1] >= cosMax) best = p }
+  const up = upOf(best), inl = count(best) / n, S = Math.hypot(best[0], best[1], best[2]) * h
+  return { up, tilt: (Math.acos(Math.min(1, up[1])) * 180) / Math.PI, inl, S, T: best[3] }
+}
+/* 깊이 지도(실수) 회전 — rotateEquirect 와 같은 규칙, 쌍선형 (무한대는 가장 가까운 값) */
+export function rotateEquirectF(src, W, H, R) {
+  const out = new Float32Array(W * H), d = [0, 0, 0]
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    dirOf((x + 0.5) / W, (y + 0.5) / H, d)
+    const sx = R[0] * d[0] + R[3] * d[1] + R[6] * d[2], sy = R[1] * d[0] + R[4] * d[1] + R[7] * d[2], sz = R[2] * d[0] + R[5] * d[1] + R[8] * d[2]
+    const lon = Math.atan2(sx, -sz), lat = Math.asin(Math.max(-1, Math.min(1, sy))), fx = (lon / (2 * Math.PI) + 0.5) * W - 0.5, fy = Math.max(0, Math.min(H - 1.001, (0.5 - lat / Math.PI) * H - 0.5))
+    const x0 = Math.floor(fx), y0 = Math.floor(fy), ax = fx - x0, ay = fy - y0, X0 = ((x0 % W) + W) % W, X1 = (X0 + 1) % W, Y1 = Math.min(H - 1, y0 + 1)
+    const v = [src[y0 * W + X0], src[y0 * W + X1], src[Y1 * W + X0], src[Y1 * W + X1]]
+    out[y * W + x] = v.every(Number.isFinite) ? (v[0] * (1 - ax) + v[1] * ax) * (1 - ay) + (v[2] * (1 - ax) + v[3] * ax) * ay : v[(ay > 0.5 ? 2 : 0) + (ax > 0.5 ? 1 : 0)]
+  }
+  return out
+}

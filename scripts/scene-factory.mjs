@@ -17,7 +17,8 @@ import { faceRGB, simDepthFaces, alignFaces, mergeFaces, FOV } from '../src/scen
 import { fitGroundPano, toMetric } from '../src/scene/factory/ground.js'
 import { buildLDI, parallaxBudget } from '../src/scene/factory/ldi.js'
 import { plateCandidates, plateKeep, yunetDecode, anonBlur, plateBlank, faceKeep, privacyLoad } from '../src/scene/factory/blur.js'
-import { analyzePano, levelRotation, rotateEquirect } from '../src/scene/factory/level.js'
+import { analyzePano, levelRotation, rotateEquirect, rotateEquirectF, groundUp } from '../src/scene/factory/level.js'
+const LEVEL_G = { minInl: 0.3, minTilt: 0.4, maxApply: 15 } /* 깊이 수평의 믿음 규칙 — calib-level --depth 결과로 고쳐요 */
 import { faceTiles, closeFace, mergeBoxes, normDisp, shotPlates } from '../src/scene/factory/shotkit.js'
 import { checkLicense, attribution } from '../src/scene/license.js'
 import { faceDir, uvOf } from '../src/scene/geom.js'
@@ -106,12 +107,16 @@ async function encodeDist(r0) { /* 거리 → log 정규화 16비트 (R = 위 8�
 async function build(s) {
   const t0 = Date.now(), lic = checkLicense(s); if (!lic.ok) { log('거절', s.id, lic.why); return null }
   let { rgb, truth, h } = await loadRGB(s), lev = null
-  if (s.kind !== 'synthetic') { /* 수평 맞추기: 기운 360 카메라 → 수평선이 물결쳐요. 1024×512 사본으로 위쪽 소실점을 재고 원본 구를 돌려요 (level.js) */
-    const sm = W === 1024 ? rgb : new Uint8Array(await (await img())(Buffer.from(rgb), { raw: { width: W, height: H, channels: 3 } }).resize(1024, 512, { fit: 'fill' }).raw().toBuffer())
-    lev = analyzePano(sm, 1024, 512); if (lev.level) rgb = rotateEquirect(rgb, W, H, levelRotation(lev.v))
+  /* 깊이 먼저 → 수평 맞추기(3판: 지면 평면 g = w·d + T 의 법선 = 위, level.js groundUp; 안 되면 경계 방식) → 구와 깊이를 함께 돌려요 → 사생활 찾기 */
+  const N = FN, { faces, how } = await depthFaces(s, rgb, truth), ab = alignFaces(faces, N); let g = mergeFaces(faces, ab, W, H, N)
+  if (s.kind !== 'synthetic') {
+    const gu = groundUp(g, W, H, { h }), okG = gu && gu.inl >= LEVEL_G.minInl && gu.tilt >= LEVEL_G.minTilt && gu.tilt <= LEVEL_G.maxApply
+    let up = okG ? gu.up : null, how2 = okG ? 'ground' : ''
+    if (!up) { const sm = W === 1024 ? rgb : new Uint8Array(await (await img())(Buffer.from(rgb), { raw: { width: W, height: H, channels: 3 } }).resize(1024, 512, { fit: 'fill' }).raw().toBuffer()), ed = analyzePano(sm, 1024, 512); if (ed.level) { up = ed.v; how2 = 'edges' } lev = { ...ed } }
+    lev = { ...(lev || {}), tilt: up ? +((Math.acos(Math.min(1, up[1])) * 180) / Math.PI).toFixed(2) : gu ? +gu.tilt.toFixed(2) : 0, gTilt: gu ? +gu.tilt.toFixed(2) : null, gInl: gu ? +gu.inl.toFixed(3) : null, level: !!up, by: how2 }
+    if (up) { const Rm = levelRotation(up); rgb = rotateEquirect(rgb, W, H, Rm); g = rotateEquirectF(g, W, H, Rm) }
   }
-  const pv = await privacy(s, rgb)
-  const N = FN, { faces, how } = await depthFaces(s, rgb, truth), ab = alignFaces(faces, N), g = mergeFaces(faces, ab, W, H, N), cal = fitGroundPano(g, W, H, { h })
+  const pv = await privacy(s, rgb), cal = fitGroundPano(g, W, H, { h })
   if (!cal || cal.inl < 0.15) { log('지면을 찾지 못했어요', s.id, cal && +cal.inl.toFixed(3)); return null } /* 실제 AI 깊이는 합성보다 거칠어요: 0.15~0.3 은 "약한 지면"으로 살리고 앱에서 이동 폭을 줄여요 */
   const r = toMetric(g, cal)
   if (pv.boxes) { /* 사생활 2판: 실제 크기로 거른 얼굴만 얼굴 모양대로 알맞게 흐리고, 번호판은 빈 판으로. 흐릴 곳이 너무 많으면 장면을 빼요 */
@@ -121,14 +126,14 @@ async function build(s) {
     if (load.frac > 0.02 || load.n > 20) { log('흐릴 곳이 너무 많아 뺐어요', s.id, JSON.stringify({ frac: +load.frac.toFixed(4), n: load.n })); return null }
     rgb = plateBlank(anonBlur(rgb, W, H, fk), W, H, pk); pv.faces = fk.length; pv.plates = pk.length; pv.note = `얼굴 후보 ${pv.boxes.length}곳 중 실제 크기가 맞는 ${fk.length}곳을 알맞게 흐림 · ` + (indoor ? '실내라 번호판은 찾지 않음' : `번호판 후보 ${(pv.cands || []).length}곳 중 ${pk.length}곳은 빈 판으로`); pv.load = +load.frac.toFixed(4)
   }
-  const rep = { id: s.id, depth: how, ground: { inliers: +cal.inl.toFixed(3), S: +cal.S.toFixed(5), T: +cal.T.toFixed(5), h }, privacy: { faces: pv.faces, plates: pv.plates, review: !!pv.review, note: pv.note, load: pv.load }, level: lev && { tilt: lev.tilt, conf: lev.conf, applied: lev.level, manh: lev.manh } }
+  const rep = { id: s.id, depth: how, ground: { inliers: +cal.inl.toFixed(3), S: +cal.S.toFixed(5), T: +cal.T.toFixed(5), h }, privacy: { faces: pv.faces, plates: pv.plates, review: !!pv.review, note: pv.note, load: pv.load }, level: lev && { tilt: lev.tilt, applied: lev.level, by: lev.by, gTilt: lev.gTilt, gInl: lev.gInl, conf: lev.conf, manh: lev.manh } }
   if (truth) { const e = []; for (let i = 0; i < r.length; i += 7) if (Number.isFinite(truth[i]) && truth[i] < 60) e.push(Math.abs(r[i] / truth[i] - 1)); e.sort((x, y) => x - y); rep.calErr = { median: +e[e.length >> 1].toFixed(4), p90: +e[(e.length * 0.9) | 0].toFixed(4) } }
   const L = buildLDI(rgb, r, W, H, { layers: +(A.layers || 3) }), _pb = parallaxBudget(L.layers, W, H), dir = join(OUT, s.id); await mkdir(dir, { recursive: true }); const files = {}, layers = []
   for (let k = 0; k < L.layers.length; k++) {
     const c = await (await img())(Buffer.from(L.layers[k].rgba), { raw: { width: W, height: H, channels: 4 } }).webp({ quality: +(A.q || 82), alphaQuality: 90, effort: 6 }).toBuffer(), dd = await encodeDist(L.layers[k].r)
     const cn = `l${k}.webp`, dn = `l${k}-dist.png`; await writeFile(join(dir, cn), c); await writeFile(join(dir, dn), dd.buf); files[cn] = sha(c); files[dn] = sha(dd.buf); layers.push({ color: cn, dist: dn, rmin: dd.rmin, rmax: dd.rmax })
   }
-  const man = { format: 'djs-scene/1', id: s.id, name: s.name, kind: s.kind, label: s.kind === 'synthetic' ? '합성 시험 장면 · 실사 아님' : s.kind === 'reconstructed' ? '재구성 장면 · CC 자산' : '실제 장소 사진 · 깊이는 AI 추정', ...(s.desc ? { desc: s.desc, stats: s.stats } : {}), theme: s.theme, size: [W, H], distSize: [W / DS, H / DS], h, ground: { S: cal.S, T: cal.T, inl: cal.inl, ...(cal.inl < 0.3 ? { weak: true } : {}) }, maxOff: _pb.t /* 시차 예산 (m) */, ...(lev ? { level: { tilt: lev.tilt, applied: lev.level } } : {}), cuts: L.cuts, layers, mood: s.mood, car: s.car ? { ahead: 9, side: s.theme === 'city' ? -1.8 : 0 } : null, sources: [{ title: s.title, author: s.author, license: lic.L, source: s.source, text: attribution(s) }], review: !!pv.review, files }
+  const man = { format: 'djs-scene/1', id: s.id, name: s.name, kind: s.kind, label: s.kind === 'synthetic' ? '합성 시험 장면 · 실사 아님' : s.kind === 'reconstructed' ? '재구성 장면 · CC 자산' : '실제 장소 사진 · 깊이는 AI 추정', ...(s.desc ? { desc: s.desc, stats: s.stats } : {}), theme: s.theme, size: [W, H], distSize: [W / DS, H / DS], h, ground: { S: cal.S, T: cal.T, inl: cal.inl, ...(cal.inl < 0.3 ? { weak: true } : {}) }, maxOff: _pb.t /* 시차 예산 (m) */, ...(lev ? { level: { tilt: lev.tilt, applied: lev.level, by: lev.by } } : {}), cuts: L.cuts, layers, mood: s.mood, car: s.car ? { ahead: 9, side: s.theme === 'city' ? -1.8 : 0 } : null, sources: [{ title: s.title, author: s.author, license: lic.L, source: s.source, text: attribution(s) }], review: !!pv.review, files }
   await writeFile(join(dir, 'manifest.json'), JSON.stringify(man, null, 1)); rep.maxOff = man.maxOff; rep.ms = Date.now() - t0; rep.bytes = Object.keys(files).length; log(s.id, JSON.stringify(rep))
   return { man, rep }
 }
@@ -175,7 +180,8 @@ async function buildShot(s) {
   return { man, rep }
 }
 export { buildShot }
-export { build, THEMES, loadRGB, img, sha }
+async function depthG(rgb) { const { faces } = await depthFaces({ id: 'calib' }, rgb, null), ab = alignFaces(faces, FN); return mergeFaces(faces, ab, W, H, FN) } /* 보정용: 병합 깊이 g (W×H) */
+export { build, THEMES, loadRGB, img, sha, depthG, W as SIZE_W }
 const MAIN = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href /* 다른 스크립트(scene-mass)가 불러 쓸 때는 아래를 돌리지 않아요 */
 if (MAIN) await (async () => {
 const list = await sources(), done = []; await mkdir(OUT, { recursive: true })

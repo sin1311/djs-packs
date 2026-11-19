@@ -207,11 +207,13 @@ async function calibLevel() {
   const L = await import('../src/scene/factory/level.js'), n = +(A.n || 300), R = (() => { let a = +(A.seed || 1) >>> 0; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296 } })()
   const list = (A.fixture ? await rd(A.fixture, []) : (await SOURCES.polyhaven(fetch)).filter((c) => !c.sky)).sort(() => R() - 0.5).slice(0, n), samples = []
   const tilts = (A.tilts || '0,3,8').split(',').map(Number)
+  let F = null; if (A.depth) { process.argv.push('--size', '1024', '--out', join(WORK, 'calib-tmp')); F = await import('./scene-factory.mjs') } /* --depth: 깊이(지면 평면) 방식도 같은 사진으로 재요 */
   await pool(list, 4, async (c) => {
     const buf = await get(c.thumb), { data } = await (await img())(buf).resize(1024, 512, { fit: 'fill' }).removeAlpha().raw().toBuffer({ resolveWithObject: true }), rgb = new Uint8Array(data)
     for (const base of tilts) {
       const deg = base ? base + (R() - 0.5) * 2 * Math.min(2, base * 0.4) : 0, az = R() * Math.PI * 2, r = (deg * Math.PI) / 180, vt = [Math.sin(r) * Math.cos(az), Math.cos(r), Math.sin(r) * Math.sin(az)], M = L.levelRotation(vt)
       const im = deg ? L.rotateEquirect(rgb, 1024, 512, [M[0], M[3], M[6], M[1], M[4], M[7], M[2], M[5], M[8]]) : rgb, E = L.edgeNormals(im, 1024, 512)
+      if (F) { try { const g = await F.depthG(im), u = L.groundUp(g, 1024, 512); if (u) samples.push({ id: c.id, deg: +deg.toFixed(2), tol: 'ground', err: +((Math.acos(Math.min(1, Math.abs(u.up[0] * vt[0] + u.up[1] * vt[1] + u.up[2] * vt[2]))) * 180) / Math.PI).toFixed(3), est: +u.tilt.toFixed(2), inl: +u.inl.toFixed(3) }) } catch (e) { log('깊이 실패', c.id, String(e.message).slice(0, 80)) } }
       for (const tol of [0.012, 0.008]) { const P = L.upParts(E, { tol }); if (!P.g) { samples.push({ id: c.id, deg, tol, none: true }); continue }
         const err = (Math.acos(Math.min(1, Math.abs(P.g.v[0] * vt[0] + P.g.v[1] * vt[1] + P.g.v[2] * vt[2]))) * 180) / Math.PI, ang = P.a && P.b ? (Math.acos(Math.min(1, Math.abs(P.a.v[0] * P.b.v[0] + P.a.v[1] * P.b.v[1] + P.a.v[2] * P.b.v[2]))) * 180) / Math.PI : 99
         samples.push({ id: c.id, deg: +deg.toFixed(2), tol, err: +err.toFixed(3), est: +P.g.tilt.toFixed(2), ang: +ang.toFixed(2), ia: P.a ? P.a.inl : 0, ib: P.b ? P.b.inl : 0, frac: +P.g.frac.toFixed(4) }) }
@@ -223,10 +225,15 @@ async function calibLevel() {
     const tilted = S.filter((x) => x.deg >= 1), flat = S.filter((x) => x.deg === 0), A1 = tilted.filter(acc), A0 = flat.filter(acc), errs = A1.map((x) => x.err).sort((p, q) => p - q), q = (p) => (errs.length ? errs[Math.min(errs.length - 1, Math.floor(errs.length * p))] : 0)
     rows.push({ tol, minInl, agree, rel, maxApply, cover: +(A1.length / Math.max(1, tilted.length)).toFixed(3), e95: +q(0.95).toFixed(2), e99: +q(0.99).toFixed(2), badFlat: +(A0.filter((x) => x.err > 1).length / Math.max(1, flat.length)).toFixed(3), n: A1.length })
   }
+  const grows = []; for (const minInl of [0.15, 0.2, 0.3, 0.4, 0.5, 0.6]) for (const maxApply of [8, 10, 12, 15, 20]) for (const minTilt of [0.4, 0.8]) {
+    const S = samples.filter((x) => x.tol === 'ground'), acc = (x) => x.inl >= minInl && x.est >= minTilt && x.est <= maxApply, tilted = S.filter((x) => x.deg >= 1), flat = S.filter((x) => x.deg === 0), A1 = tilted.filter(acc), A0 = flat.filter(acc), errs = A1.map((x) => x.err).sort((p, q) => p - q), qq = (p) => (errs.length ? errs[Math.min(errs.length - 1, Math.floor(errs.length * p))] : 0)
+    if (S.length) grows.push({ method: 'ground', minInl, maxApply, minTilt, cover: +(A1.length / Math.max(1, tilted.length)).toFixed(3), e95: +qq(0.95).toFixed(2), e99: +qq(0.99).toFixed(2), badFlat: +(A0.filter((x) => x.err > 1).length / Math.max(1, flat.length)).toFixed(3), n: A1.length }) }
+  const ggood = grows.filter((r) => r.e95 <= 1 && r.e99 <= 2 && r.badFlat <= 0.01).sort((a, b) => b.cover - a.cover || a.e99 - b.e99 || b.minInl - a.minInl)
+  if (grows.length) { log('깊이(지면) 방식 — 조건을 지키는 규칙', ggood.length, '개'); for (const r of ggood.slice(0, 8)) log('  깊이 후보', JSON.stringify(r)); const G = samples.filter((x) => x.tol === 'ground'), bd = {}; for (const x of G) { const k = x.deg === 0 ? '0' : x.deg < 5 ? '1-5' : '5-12'; (bd[k] = bd[k] || []).push(x.err) } for (const [k, v] of Object.entries(bd)) { v.sort((a, b) => a - b); log(`  깊이 잰 오차 (기울기 ${k}°) 중앙/90%:`, v[v.length >> 1], '/', v[Math.floor(v.length * 0.9)], `(${v.length})`) } }
   const good = rows.filter((r) => r.e95 <= 1 && r.e99 <= 2 && r.badFlat <= 0.01).sort((a, b) => b.cover - a.cover || a.e99 - b.e99 || b.minInl - a.minInl || a.agree - b.agree), cur = rows.find((r) => r.tol === 0.012 && r.minInl === 120 && r.agree === 1 && r.rel === 0.15 && r.maxApply === 25)
   log('보정: 사진', list.length, '· 표본', samples.length, '· 지금 규칙', JSON.stringify(cur)); for (const r of good.slice(0, 8)) log('  후보', JSON.stringify(r))
   const raw = samples.filter((x) => x.tol === 0.012 && !x.none), byDeg = {}; for (const x of raw) { const k = x.deg === 0 ? '0' : x.deg < 5 ? '1-5' : '5-12'; (byDeg[k] = byDeg[k] || []).push(x.err) } for (const [k, v] of Object.entries(byDeg)) { v.sort((a, b) => a - b); log(`  잰 오차 (기울기 ${k}°) 중앙/90%:`, v[v.length >> 1], '/', v[Math.floor(v.length * 0.9)], `(${v.length})`) }
-  await wr(join(WORK, 'calib-level.json'), { best: good[0] || null, current: cur, top: good.slice(0, 20), samples })
+  await wr(join(WORK, 'calib-level.json'), { best: good[0] || null, current: cur, top: good.slice(0, 20), ground: { best: ggood[0] || null, top: ggood.slice(0, 20), all: grows }, samples })
 }
 const ST = { 'calib-level': calibLevel, 'synth-skies': synthSkies, 'synth-shots': synthShots, catalog, gate: gateStage, curate: curateStage, build: buildStage, merge: mergeStage, skies: skiesStage }
 for (const s of String(A.stage || 'catalog').split(',')) { if (!ST[s]) throw new Error('모르는 --stage ' + s); log('==', s); await ST[s]() }
