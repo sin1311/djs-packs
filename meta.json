@@ -1,0 +1,114 @@
+{
+ "model": "Xenova/clap-htsat-unfused",
+ "upstream": "laion/clap-htsat-unfused",
+ "license": {
+  "laion": "apache-2.0",
+  "code": "CC0-1.0 (LAION-AI/CLAP)"
+ },
+ "files": [
+  {
+   "f": ".gitattributes",
+   "mb": 0
+  },
+  {
+   "f": "README.md",
+   "mb": 0
+  },
+  {
+   "f": "config.json",
+   "mb": 0
+  },
+  {
+   "f": "merges.txt",
+   "mb": 0.4
+  },
+  {
+   "f": "onnx/audio_model.onnx",
+   "mb": 112.1
+  },
+  {
+   "f": "onnx/audio_model_fp16.onnx",
+   "mb": 57.6
+  },
+  {
+   "f": "onnx/audio_model_quantized.onnx",
+   "mb": 32.7
+  },
+  {
+   "f": "onnx/model.onnx",
+   "mb": 590.4
+  },
+  {
+   "f": "onnx/model_fp16.onnx",
+   "mb": 297.2
+  },
+  {
+   "f": "onnx/model_quantized.onnx",
+   "mb": 153.6
+  },
+  {
+   "f": "onnx/text_model.onnx",
+   "mb": 478.3
+  },
+  {
+   "f": "onnx/text_model_fp16.onnx",
+   "mb": 239.4
+  },
+  {
+   "f": "onnx/text_model_quantized.onnx",
+   "mb": 120.7
+  },
+  {
+   "f": "preprocessor_config.json",
+   "mb": 0
+  },
+  {
+   "f": "quantize_config.json",
+   "mb": 0
+  },
+  {
+   "f": "special_tokens_map.json",
+   "mb": 0
+  },
+  {
+   "f": "tokenizer.json",
+   "mb": 2
+  },
+  {
+   "f": "tokenizer_config.json",
+   "mb": 0
+  },
+  {
+   "f": "vocab.json",
+   "mb": 0.8
+  }
+ ],
+ "pre": {
+  "chunk_length_s": 10,
+  "feature_extractor_type": "ClapFeatureExtractor",
+  "feature_size": 64,
+  "fft_window_size": 1024,
+  "frequency_max": 14000,
+  "frequency_min": 50,
+  "hop_length": 480,
+  "max_length_s": 10,
+  "n_fft": 1024,
+  "nb_frequency_bins": 513,
+  "nb_max_frames": 1000,
+  "nb_max_samples": 480000,
+  "padding": "repeatpad",
+  "padding_side": "right",
+  "padding_value": 0,
+  "processor_class": "ClapProcessor",
+  "return_attention_mask": false,
+  "sampling_rate": 48000,
+  "top_db": null,
+  "truncation": "rand_trunc"
+ },
+ "audioFile": "onnx/audio_model_quantized.onnx",
+ "sha": {
+  "clap-desc.json": "0817db8dc08fc1c85718e32c7cd519c04c9805b4f295a82f3214f9e66683fba5",
+  "clap-ref.json": "08f922d177723d71f13d42708f22513f5455b31fe063b847755b52020e22176e",
+  "clap-audio-q.onnx": "3fcff2c8824e7bcb83a983f2a49edab3b60cbcf4872ac70efee517355173bd1f"
+ }
+}
