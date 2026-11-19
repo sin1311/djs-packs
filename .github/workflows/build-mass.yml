@@ -86,11 +86,23 @@ jobs:
         run: |
           D=out/scenes-r${{ github.run_number }}-${{ matrix.shard }}; B=$(basename $D)
           if [ -n "$HF_TOKEN" ] && [ -n "${{ github.event.inputs.hf_repo }}" ]; then
-            pip install -q -U huggingface_hub
-            for k in 1 2 3 4 5; do huggingface-cli upload "${{ github.event.inputs.hf_repo }}" "$D" "$B" --repo-type dataset --commit-message "장면 $B" && break; sleep $((k * 20)); done
+            python3 -m pip install -q -U huggingface_hub
+            # 파이썬 API 로 올려요 (예전 huggingface-cli 명령은 새 버전에서 없어져 첫 실행이 조용히 실패했어요). 5번 실패하면 이 작업을 실패로 멈춰요
+            HF_REPO="${{ github.event.inputs.hf_repo }}" D="$D" B="$B" python3 - <<'PY'
+          import os, time
+          from huggingface_hub import HfApi
+          api, ok = HfApi(token=os.environ['HF_TOKEN']), False
+          for k in range(5):
+              try:
+                  api.upload_folder(repo_id=os.environ['HF_REPO'], repo_type='dataset', folder_path=os.environ['D'], path_in_repo=os.environ['B'], commit_message='장면 ' + os.environ['B'])
+                  ok = True; print('올리기 완료:', os.environ['B']); break
+              except Exception as e:
+                  print('올리기 다시', k + 1, str(e)[:200]); time.sleep(20 * (k + 1))
+          if not ok: raise SystemExit('Hugging Face 올리기 실패: ' + os.environ['B'])
+          PY
           else
             git config --global user.name 'github-actions[bot]'; git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-            cp README.md "$D/README.md"; (cd "$D" && git init -q -b "$B" && git add -A && git commit -q -m "장면 $B" && for k in 1 2 3 4; do git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" "$B" && break; sleep $((k * 15)); done)
+            cp README.md "$D/README.md"; (cd "$D" && git init -q -b "$B" && git add -A && git commit -q -m "장면 $B" && ok=0 && for k in 1 2 3 4; do git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" "$B" && ok=1 && break; sleep $((k * 15)); done; [ $ok = 1 ] || { echo "GitHub 올리기 실패: $B"; exit 1; })
           fi
           mkdir -p parts/$B && cp $D/part.json parts/$B/part.json
       - uses: actions/upload-artifact@v4

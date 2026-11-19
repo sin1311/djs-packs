@@ -12,7 +12,7 @@ export const isPano = (w, h) => w > 0 && h > 0 && Math.abs(w / h - 2) < 0.04
 export async function polyhaven(fetch, { limit = 2000 } = {}) {
   const all = await J(fetch, 'https://api.polyhaven.com/assets?t=hdris'), out = []
   for (const [id, a] of Object.entries(all)) {
-    const cats = (a.categories || []).map((x) => String(x).toLowerCase()), sky = cats.includes('skies') && !cats.some((c) => /urban|indoor|nature|natural light/.test(c))
+    const cats = (a.categories || []).map((x) => String(x).toLowerCase()), sky = cats.includes('skies') && !cats.some((c) => /urban|indoor/.test(c)) /* 하늘 HDRI 에는 natural light 태그가 붙어요 (첫 실행에서 하늘 0개였던 원인) */
     out.push({ src: 'polyhaven', id: 'ph-' + id, title: a.name || id, author: Object.keys(a.authors || {}).join(', ') || 'Poly Haven', license: 'CC0', source: 'https://polyhaven.com/a/' + id, url: `https://dl.polyhaven.org/file/ph-assets/HDRIs/extra/Tonemapped%20JPG/${id}.jpg`, thumb: `https://cdn.polyhaven.com/asset_img/thumbs/${id}.png?width=1024&height=512`, w: (a.max_resolution || [8192])[0], h: (a.max_resolution || [0, 4096])[1], text: [a.name, ...cats, ...(a.tags || [])].join(' '), sky })
     if (out.length >= limit) break
   }
@@ -23,6 +23,7 @@ export async function ambientcg(fetch, { limit = 1000 } = {}) {
   const out = []
   for (let off = 0; off < limit; off += 100) {
     const j = await J(fetch, `https://ambientcg.com/api/v2/full_json?type=HDRI&include=downloadData,tagData,imageData&limit=100&offset=${off}`), list = j.foundAssets || []
+    if (off === 0) console.log('[mass] ambientcg 응답 모양:', JSON.stringify(Object.keys(j)).slice(0, 200), list[0] ? JSON.stringify(list[0]).slice(0, 600) : '(목록 없음)') /* 첫 실행에서 0개 → 형식 확인용 */
     for (const a of list) {
       const dl = Object.values(a.downloadFolders || {}).flatMap((f) => Object.values(f.downloadFiletypeCategories || {}).flatMap((c) => c.downloads || [])), pick = (re) => dl.filter((d) => re.test(d.attribute || d.fileName || '')).sort((x, y) => (x.size || 0) - (y.size || 0))[0]
       const img = pick(/TONEMAPPED.*(JPG|PNG)|8K-JPG|4K-JPG/i) || pick(/JPG|PNG/i); if (!img) continue
@@ -34,13 +35,16 @@ export async function ambientcg(fetch, { limit = 1000 } = {}) {
   return out
 }
 // 3) 위키미디어 공용 — 등장방형 360° 파노라마 (파일마다 라이선스). 분위기 칸을 채울 검색어로 여러 번
-export async function wikimedia(fetch, { terms = ['equirectangular'], per = 200, minW = 4000 } = {}) {
+export const WM_CATS = ['Category:Equirectangular projections', 'Category:360° panoramas', 'Category:Spherical panoramas', 'Category:Equirectangular panoramas']
+export async function wikimedia(fetch, { terms = ['equirectangular'], per = 200, minW = 4000, cats = WM_CATS, perCat = 1500 } = {}) {
   const out = [], seen = new Set()
+  const take = (p) => { const ii = (p.imageinfo || [])[0]; if (!ii || seen.has(p.pageid)) return; seen.add(p.pageid); if (!/jpeg|png/.test(ii.mime || '') || !isPano(ii.width, ii.height) || ii.width < minW) return; const m = ii.extmetadata || {}, v = (k) => strip((m[k] || {}).value); out.push({ src: 'wikimedia', id: 'wm-' + p.pageid, title: p.title.replace(/^File:/, '').replace(/\.\w+$/, ''), author: v('Artist') || '?', license: v('LicenseShortName') || v('License'), source: ii.descriptionurl, url: ii.thumburl || ii.url, thumb: (ii.thumburl || ii.url || '').replace(/\/\d+px-/, '/1024px-'), w: ii.width, h: ii.height, text: [p.title, v('ImageDescription'), v('Categories')].join(' ').slice(0, 400) }) }
+  for (const c of cats) { let cont = {}; for (let got = 0; got < perCat;) { let j; try { j = await J(fetch, 'https://commons.wikimedia.org/w/api.php?' + new URLSearchParams({ action: 'query', format: 'json', generator: 'categorymembers', gcmtitle: c, gcmtype: 'file', gcmlimit: '50', prop: 'imageinfo', iiprop: 'url|size|mime|extmetadata', iiurlwidth: '4096', origin: '*', ...cont })) } catch (e) { console.log('[mass] wikimedia', c, '건너뜀:', String(e.message).slice(0, 60)); break } const pages = Object.values((j.query || {}).pages || {}); for (const p of pages) { take(p); got++ } if (!j.continue || !pages.length) break; cont = j.continue } } /* 360° 파노라마 분류에서 먼저 (검색어만으로는 164개뿐이었어요) */
   for (const t of terms) {
     let cont = {}
     for (let got = 0; got < per;) {
       const q = new URLSearchParams({ action: 'query', format: 'json', generator: 'search', gsrsearch: `${t} equirectangular filetype:bitmap`, gsrnamespace: '6', gsrlimit: '50', prop: 'imageinfo', iiprop: 'url|size|mime|extmetadata', iiurlwidth: '4096', origin: '*', ...cont })
-      const j = await J(fetch, 'https://commons.wikimedia.org/w/api.php?' + q), pages = Object.values((j.query || {}).pages || {})
+      let j; try { j = await J(fetch, 'https://commons.wikimedia.org/w/api.php?' + q) } catch (e) { break } const pages = Object.values((j.query || {}).pages || {})
       for (const p of pages) {
         const ii = (p.imageinfo || [])[0]; if (!ii || seen.has(p.pageid)) continue; seen.add(p.pageid); got++
         if (!/jpeg|png/.test(ii.mime || '') || !isPano(ii.width, ii.height) || ii.width < minW) continue
@@ -56,7 +60,7 @@ export async function wikimedia(fetch, { terms = ['equirectangular'], per = 200,
 export async function panoramax(fetch, { bboxes = CITY_BBOX, per = 60 } = {}) {
   const out = []
   for (const [name, bb] of bboxes) {
-    const j = await J(fetch, `https://api.panoramax.xyz/api/search?bbox=${bb.join(',')}&limit=${per}`)
+    let j; try { j = await J(fetch, `https://api.panoramax.xyz/api/search?bbox=${bb.join(',')}&limit=${per}`) } catch (e) { console.log('[mass] panoramax', name, '건너뜀:', String(e.message).slice(0, 80)); continue } /* 도시 하나가 실패해도 나머지는 계속 */
     for (const f of j.features || []) {
       const pr = f.properties || {}, io = pr['pers:interior_orientation'] || {}, a = f.assets || {}; if (+io.field_of_view !== 360) continue
       const W = +(pr['pers:interior_orientation'] || {}).sensor_array_dimensions?.[0] || 5760, H = +(pr['pers:interior_orientation'] || {}).sensor_array_dimensions?.[1] || 2880
@@ -69,8 +73,9 @@ export async function panoramax(fetch, { bboxes = CITY_BBOX, per = 60 } = {}) {
 export async function mapillary(fetch, { token, bboxes = CITY_BBOX, per = 60 } = {}) {
   if (!token) return []
   const out = []
-  for (const [name, bb] of bboxes) {
-    const j = await J(fetch, `https://graph.mapillary.com/images?fields=id,thumb_2048_url,thumb_1024_url,is_pano,creator,captured_at,width,height&is_pano=true&bbox=${bb.join(',')}&limit=${per}`, { headers: { Authorization: 'OAuth ' + token } })
+  for (const [name, bb0] of bboxes) {
+    const cx = (bb0[0] + bb0[2]) / 2, cy = (bb0[1] + bb0[3]) / 2, bb = [cx - 0.006, cy - 0.006, cx + 0.006, cy + 0.006] /* 작은 영역 (큰 영역은 서버 오류 500 이 났어요) */
+    let j; try { j = await J(fetch, `https://graph.mapillary.com/images?access_token=${encodeURIComponent(token)}&fields=id,thumb_2048_url,thumb_1024_url,is_pano,creator&is_pano=true&bbox=${bb.join(',')}&limit=${per}`) } catch (e) { console.log('[mass] mapillary', name, '건너뜀:', String(e.message).slice(0, 80)); continue }
     for (const im of j.data || []) { if (!im.is_pano) continue; out.push({ src: 'mapillary', id: 'mly-' + im.id, title: `${name} 거리`, author: (im.creator || {}).username || 'Mapillary 기여자', license: 'CC-BY-SA-4.0', source: 'https://www.mapillary.com/app/?pKey=' + im.id, url: im.thumb_2048_url, thumb: im.thumb_1024_url || im.thumb_2048_url, w: im.width || 4096, h: im.height || 2048, text: `${name} street`, geo: null, blurred: true }) }
   }
   return out

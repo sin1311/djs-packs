@@ -109,7 +109,7 @@ async function build(s) {
   const t0 = Date.now(), lic = checkLicense(s); if (!lic.ok) { log('거절', s.id, lic.why); return null }
   let { rgb, truth, h } = await loadRGB(s); const pv = await privacy(s, rgb); rgb = pv.rgb
   const N = FN, { faces, how } = await depthFaces(s, rgb, truth), ab = alignFaces(faces, N), g = mergeFaces(faces, ab, W, H, N), cal = fitGroundPano(g, W, H, { h })
-  if (!cal || cal.inl < 0.3) { log('지면을 찾지 못했어요', s.id, cal); return null }
+  if (!cal || cal.inl < 0.15) { log('지면을 찾지 못했어요', s.id, cal && +cal.inl.toFixed(3)); return null } /* 실제 AI 깊이는 합성보다 거칠어요: 0.15~0.3 은 "약한 지면"으로 살리고 앱에서 이동 폭을 줄여요 */
   const r = toMetric(g, cal), pp = platePass(rgb, r, pv.cands || []); rgb = pp.rgb; pv.plates = pp.n; if (pv.cands) pv.note = `번호판 후보 ${pv.cands.length}곳 중 읽을 수 있는 거리 · 높이의 ${pp.n}곳만 흐렸어요`
   const rep = { id: s.id, depth: how, ground: { inliers: +cal.inl.toFixed(3), S: +cal.S.toFixed(5), T: +cal.T.toFixed(5), h }, privacy: { faces: pv.faces, plates: pv.plates, review: !!pv.review, note: pv.note } }
   if (truth) { const e = []; for (let i = 0; i < r.length; i += 7) if (Number.isFinite(truth[i]) && truth[i] < 60) e.push(Math.abs(r[i] / truth[i] - 1)); e.sort((x, y) => x - y); rep.calErr = { median: +e[e.length >> 1].toFixed(4), p90: +e[(e.length * 0.9) | 0].toFixed(4) } }
@@ -118,7 +118,7 @@ async function build(s) {
     const c = await (await img())(Buffer.from(L.layers[k].rgba), { raw: { width: W, height: H, channels: 4 } }).webp({ quality: +(A.q || 82), alphaQuality: 90, effort: 6 }).toBuffer(), dd = await encodeDist(L.layers[k].r)
     const cn = `l${k}.webp`, dn = `l${k}-dist.png`; await writeFile(join(dir, cn), c); await writeFile(join(dir, dn), dd.buf); files[cn] = sha(c); files[dn] = sha(dd.buf); layers.push({ color: cn, dist: dn, rmin: dd.rmin, rmax: dd.rmax })
   }
-  const man = { format: 'djs-scene/1', id: s.id, name: s.name, kind: s.kind, label: s.kind === 'synthetic' ? '합성 시험 장면 · 실사 아님' : s.kind === 'reconstructed' ? '재구성 장면 · CC 자산' : '실제 장소 사진 · 깊이는 AI 추정', ...(s.desc ? { desc: s.desc, stats: s.stats } : {}), theme: s.theme, size: [W, H], distSize: [W / DS, H / DS], h, ground: { S: cal.S, T: cal.T, inl: cal.inl }, cuts: L.cuts, layers, mood: s.mood, car: s.car ? { ahead: 9, side: s.theme === 'city' ? -1.8 : 0 } : null, sources: [{ title: s.title, author: s.author, license: lic.L, source: s.source, text: attribution(s) }], review: !!pv.review, files }
+  const man = { format: 'djs-scene/1', id: s.id, name: s.name, kind: s.kind, label: s.kind === 'synthetic' ? '합성 시험 장면 · 실사 아님' : s.kind === 'reconstructed' ? '재구성 장면 · CC 자산' : '실제 장소 사진 · 깊이는 AI 추정', ...(s.desc ? { desc: s.desc, stats: s.stats } : {}), theme: s.theme, size: [W, H], distSize: [W / DS, H / DS], h, ground: { S: cal.S, T: cal.T, inl: cal.inl, ...(cal.inl < 0.3 ? { weak: true } : {}) }, cuts: L.cuts, layers, mood: s.mood, car: s.car ? { ahead: 9, side: s.theme === 'city' ? -1.8 : 0 } : null, sources: [{ title: s.title, author: s.author, license: lic.L, source: s.source, text: attribution(s) }], review: !!pv.review, files }
   await writeFile(join(dir, 'manifest.json'), JSON.stringify(man, null, 1)); rep.ms = Date.now() - t0; rep.bytes = Object.keys(files).length; log(s.id, JSON.stringify(rep))
   return { man, rep }
 }
