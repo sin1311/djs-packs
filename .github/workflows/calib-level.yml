@@ -1,0 +1,26 @@
+# 수평 맞추기 보정 (사람이 시작): Poly Haven HDRI(수평 정답 0°)를 아는 각도로 기울여 재고, 믿음 규칙을 고르는 표를 만들어요.
+#  결과: 로그의 "후보" 줄 + 아티팩트 calib-level (calib-level.json). 장면을 만들거나 올리지 않아요.
+name: calib-level
+on:
+  workflow_dispatch:
+    inputs:
+      n: { description: '사진 수', default: '300' }
+      tilts: { description: '기울기(도, 쉼표) — 0 은 반듯한 사진 그대로', default: '0,3,8' }
+permissions:
+  contents: read
+jobs:
+  calib:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: 도구
+        run: |
+          npm init -y > /dev/null
+          npm i sharp@0.33.5
+      - name: 보정
+        run: node scripts/scene-mass.mjs --stage calib-level --n "${{ github.event.inputs.n }}" --tilts "${{ github.event.inputs.tilts }}"
+      - uses: actions/upload-artifact@v4
+        with: { name: calib-level, path: work/calib-level.json }

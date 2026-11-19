@@ -200,6 +200,34 @@ async function synthShots() {
   }
   const ix = await rd(join(out, 'index.json'), { format: 'djs-scenes/1', scenes: [] }); ix.shots = list; await writeFile(join(out, 'index.json'), JSON.stringify(ix, null, 1)); log('합성 컷:', list.length, '→', join(out, 'shots'))
 }
-const ST = { 'synth-skies': synthSkies, 'synth-shots': synthShots, catalog, gate: gateStage, curate: curateStage, build: buildStage, merge: mergeStage, skies: skiesStage }
+// 수평 맞추기 맞추기(보정) — 정답을 아는 실제 자료로: Poly Haven HDRI 는 촬영 때 수평을 맞춰 올려요(정답 기울기 0).
+//  그 사진들을 아는 각도(0° 또는 1~12°, 무작위 축)로 기울여 재고, 믿음 규칙 격자(경계 수 · 좌우 일치 · 상대 허용 · 최대 적용)마다
+//  "바로잡는 비율(적용률)"과 "적용한 것의 오차 95% · 99%", "반듯한 사진을 잘못 돌린 비율"을 세요. 오차 95% ≤ 1° · 99% ≤ 2° · 잘못 돌림 ≤ 1% 안에서 적용률 최대.
+async function calibLevel() {
+  const L = await import('../src/scene/factory/level.js'), n = +(A.n || 300), R = (() => { let a = +(A.seed || 1) >>> 0; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296 } })()
+  const list = (A.fixture ? await rd(A.fixture, []) : (await SOURCES.polyhaven(fetch)).filter((c) => !c.sky)).sort(() => R() - 0.5).slice(0, n), samples = []
+  const tilts = (A.tilts || '0,3,8').split(',').map(Number)
+  await pool(list, 4, async (c) => {
+    const buf = await get(c.thumb), { data } = await (await img())(buf).resize(1024, 512, { fit: 'fill' }).removeAlpha().raw().toBuffer({ resolveWithObject: true }), rgb = new Uint8Array(data)
+    for (const base of tilts) {
+      const deg = base ? base + (R() - 0.5) * 2 * Math.min(2, base * 0.4) : 0, az = R() * Math.PI * 2, r = (deg * Math.PI) / 180, vt = [Math.sin(r) * Math.cos(az), Math.cos(r), Math.sin(r) * Math.sin(az)], M = L.levelRotation(vt)
+      const im = deg ? L.rotateEquirect(rgb, 1024, 512, [M[0], M[3], M[6], M[1], M[4], M[7], M[2], M[5], M[8]]) : rgb, E = L.edgeNormals(im, 1024, 512)
+      for (const tol of [0.012, 0.008]) { const P = L.upParts(E, { tol }); if (!P.g) { samples.push({ id: c.id, deg, tol, none: true }); continue }
+        const err = (Math.acos(Math.min(1, Math.abs(P.g.v[0] * vt[0] + P.g.v[1] * vt[1] + P.g.v[2] * vt[2]))) * 180) / Math.PI, ang = P.a && P.b ? (Math.acos(Math.min(1, Math.abs(P.a.v[0] * P.b.v[0] + P.a.v[1] * P.b.v[1] + P.a.v[2] * P.b.v[2]))) * 180) / Math.PI : 99
+        samples.push({ id: c.id, deg: +deg.toFixed(2), tol, err: +err.toFixed(3), est: +P.g.tilt.toFixed(2), ang: +ang.toFixed(2), ia: P.a ? P.a.inl : 0, ib: P.b ? P.b.inl : 0, frac: +P.g.frac.toFixed(4) }) }
+    }
+  })
+  const rows = []
+  for (const tol of [0.012, 0.008]) for (const minInl of [40, 80, 120, 200, 300]) for (const agree of [0.5, 1, 1.5, 2, 3]) for (const rel of [0, 0.15, 0.3]) for (const maxApply of [12, 15, 25]) {
+    const S = samples.filter((x) => x.tol === tol && !x.none), acc = (x) => x.ia >= minInl && x.ib >= minInl && x.ang <= Math.max(agree, rel * x.est) && x.est <= maxApply && x.est > 0.4
+    const tilted = S.filter((x) => x.deg >= 1), flat = S.filter((x) => x.deg === 0), A1 = tilted.filter(acc), A0 = flat.filter(acc), errs = A1.map((x) => x.err).sort((p, q) => p - q), q = (p) => (errs.length ? errs[Math.min(errs.length - 1, Math.floor(errs.length * p))] : 0)
+    rows.push({ tol, minInl, agree, rel, maxApply, cover: +(A1.length / Math.max(1, tilted.length)).toFixed(3), e95: +q(0.95).toFixed(2), e99: +q(0.99).toFixed(2), badFlat: +(A0.filter((x) => x.err > 1).length / Math.max(1, flat.length)).toFixed(3), n: A1.length })
+  }
+  const good = rows.filter((r) => r.e95 <= 1 && r.e99 <= 2 && r.badFlat <= 0.01).sort((a, b) => b.cover - a.cover || a.e99 - b.e99 || b.minInl - a.minInl || a.agree - b.agree), cur = rows.find((r) => r.tol === 0.012 && r.minInl === 120 && r.agree === 1 && r.rel === 0.15 && r.maxApply === 25)
+  log('보정: 사진', list.length, '· 표본', samples.length, '· 지금 규칙', JSON.stringify(cur)); for (const r of good.slice(0, 8)) log('  후보', JSON.stringify(r))
+  const raw = samples.filter((x) => x.tol === 0.012 && !x.none), byDeg = {}; for (const x of raw) { const k = x.deg === 0 ? '0' : x.deg < 5 ? '1-5' : '5-12'; (byDeg[k] = byDeg[k] || []).push(x.err) } for (const [k, v] of Object.entries(byDeg)) { v.sort((a, b) => a - b); log(`  잰 오차 (기울기 ${k}°) 중앙/90%:`, v[v.length >> 1], '/', v[Math.floor(v.length * 0.9)], `(${v.length})`) }
+  await wr(join(WORK, 'calib-level.json'), { best: good[0] || null, current: cur, top: good.slice(0, 20), samples })
+}
+const ST = { 'calib-level': calibLevel, 'synth-skies': synthSkies, 'synth-shots': synthShots, catalog, gate: gateStage, curate: curateStage, build: buildStage, merge: mergeStage, skies: skiesStage }
 for (const s of String(A.stage || 'catalog').split(',')) { if (!ST[s]) throw new Error('모르는 --stage ' + s); log('==', s); await ST[s]() }
 void isPano

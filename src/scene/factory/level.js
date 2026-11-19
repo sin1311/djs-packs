@@ -82,13 +82,15 @@ function ransacUp(E, sel, { iters = 700, tol = 0.012, maxTilt = 25, seed = 7 } =
   const [s, c] = cons(best, tol); let tot = 0; for (const i of sel) tot += w[i]
   return { v: best, inl: c, frac: s / tot, tilt: (Math.acos(Math.min(1, best[1])) * 180) / Math.PI }
 }
-export function upVector2(E, { minInl = 120, agree = 1.0 } = {}) {
-  const k = E.w.length, all = [], left = [], right = []; for (let i = 0; i < k; i++) { all.push(i); (E.az[i] < 0.5 ? left : right).push(i) }
-  const g = ransacUp(E, all), a = ransacUp(E, left, { seed: 11 }), b = ransacUp(E, right, { seed: 13 })
+/* 믿음 규칙 (calib-level 단계가 실제 파노라마 + 아는 기울기로 고른 값을 여기 적어요) */
+export const LEVEL_RULE = { minInl: 120, agree: 1.0, rel: 0.15, maxApply: 25 }
+export function upParts(E, { tol = 0.012 } = {}) { const k = E.w.length, all = [], left = [], right = []; for (let i = 0; i < k; i++) { all.push(i); (E.az[i] < 0.5 ? left : right).push(i) } return { g: ransacUp(E, all, { tol }), a: ransacUp(E, left, { seed: 11, tol }), b: ransacUp(E, right, { seed: 13, tol }) } }
+export function trustUp({ g, a, b }, R = LEVEL_RULE) { if (!g || !a || !b) return { ok: false, ang: 99 }; const ang = (Math.acos(Math.min(1, Math.abs(a.v[0] * b.v[0] + a.v[1] * b.v[1] + a.v[2] * b.v[2]))) * 180) / Math.PI; return { ok: a.inl >= R.minInl && b.inl >= R.minInl && ang <= Math.max(R.agree, R.rel * g.tilt) && g.tilt <= R.maxApply, ang } }
+export function upVector2(E, R = LEVEL_RULE) {
+  const { g, a, b } = upParts(E)
   if (!g) return { v: [0, 1, 0], tilt: 0, conf: 0, ok: false, why: '경계가 적어요' }
-  const ang = a && b ? (Math.acos(Math.min(1, Math.abs(a.v[0] * b.v[0] + a.v[1] * b.v[1] + a.v[2] * b.v[2]))) * 180) / Math.PI : 99
-  const ok = !!(a && b) && a.inl >= minInl && b.inl >= minInl && ang <= Math.max(agree, 0.15 * g.tilt)
-  return { v: g.v, tilt: g.tilt, conf: g.frac, ok, halves: +ang.toFixed(2), inl: g.inl }
+  const t = trustUp({ g, a, b }, R)
+  return { v: g.v, tilt: g.tilt, conf: g.frac, ok: t.ok, halves: +t.ang.toFixed(2), inl: g.inl }
 }
 // 맨해튼 점수: 수평을 맞춘 뒤(위 = v) 세로가 아닌 경계들 중, 수평면의 직교 소실점 쌍 (h, h⊥) 의 큰 원에 맞는 무게 비율 (최댓값)
 export function manhattanScore(E, v = [0, 1, 0], { tol = 0.035, vert = 0.12 } = {}) {
