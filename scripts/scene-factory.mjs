@@ -11,7 +11,7 @@ import { createHash } from 'node:crypto'
 import { mkdir, writeFile, readFile, rename } from 'node:fs/promises'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { UA } from '../src/scene/factory/sources.js'
+import { UA, fetchRetry } from '../src/scene/factory/sources.js'
 import { SYNTH, renderSynth } from '../src/scene/factory/synth.js'
 import { faceRGB, simDepthFaces, alignFaces, mergeFaces, FOV } from '../src/scene/factory/depth.js'
 import { fitGroundPano, toMetric } from '../src/scene/factory/ground.js'
@@ -65,7 +65,7 @@ async function sources() {
 }
 async function loadRGB(s) {
   if (s.kind === 'synthetic') { const o = renderSynth(s.make(SEED), W, H); return { rgb: o.rgb, truth: o.r, h: o.h } }
-  let buf; if (/^(file:|\/)/.test(s.url)) buf = await readFile(s.url.replace(/^file:\/\//, '')); else { const res = await fetch(s.url, { headers: { 'User-Agent': UA } }); if (!res.ok) throw new Error('HTTP ' + res.status + ' ' + String(s.url).slice(0, 80)); buf = Buffer.from(await res.arrayBuffer()) } /* 로컬 파일은 오프라인 시험용 */
+  let buf; if (/^(file:|\/)/.test(s.url)) buf = await readFile(s.url.replace(/^file:\/\//, '')); else buf = Buffer.from(await (await fetchRetry(s.url)).arrayBuffer()) /* 로컬 파일은 오프라인 시험용 */
   const { data } = await (await img())(buf).resize(W, H, { fit: 'fill' }).removeAlpha().raw().toBuffer({ resolveWithObject: true })
   return { rgb: new Uint8Array(data), truth: null, h: s.h || 1.6 }
 }

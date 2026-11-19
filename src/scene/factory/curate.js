@@ -9,10 +9,13 @@ export function dedupe(cands, maxHam = 6) {
   outer: for (const c of byQ) { for (const k of keep) if (c.hash && k.hash && hamming(c.hash, k.hash) <= maxHam) { k.dups = (k.dups || 0) + 1; continue outer } keep.push(c) }
   return keep
 }
-export function targets(per = 6) { const T = new Float32Array(N); const wmax = Math.max(...GROUPS.map((g) => g[2])); DESC.forEach((d, i) => { const w = GROUPS.find((g) => g[0] === d.g)[2]; T[i] = per * (0.6 + 0.4 * w / wmax) }); return T }
+/* 칸 목표: 갈래 하나의 서술어 확률은 장면마다 합 1 이라, 장면 S 곳이면 갈래 전체가 S 만큼 채워져요.
+   목표 = share · S / (그 갈래 서술어 수) · (0.6 + 0.4 · 갈래 무게 / 최대) — 고르게 나눈 몫의 절반쯤을 바닥으로 둬요.
+   (예전엔 칸마다 6곳 고정이라 장면 1488곳이면 모든 칸이 "다 참" → 빈 칸 보고서가 비었어요) */
+export function targets(size = 60, share = 0.5) { const T = new Float32Array(N); const wmax = Math.max(...GROUPS.map((g) => g[2])), k = {}; for (const d of DESC) k[d.g] = (k[d.g] || 0) + 1; DESC.forEach((d, i) => { const w = GROUPS.find((g) => g[0] === d.g)[2]; T[i] = share * size / k[d.g] * (0.6 + 0.4 * w / wmax) }); return T }
 // cands: [{ id, q(품질 0–1), d(Float32Array N 분포), … }] → { picked, cov, gaps }
-export function curate(cands, { total = 2500, per = 6, beta = 0.6, init = null } = {}) {
-  const T = targets(per), cov = init ? Float32Array.from(init) : new Float32Array(N) /* init: 이미 있는 장면들이 채운 몫 (이어서 모으기) */, picked = [], left = new Set(cands.map((_, i) => i))
+export function curate(cands, { total = 2500, size = 0, share = 0.5, beta = 0.6, init = null } = {}) { /* size: 다 모였을 때 장면 수 (이미 있는 것 + 이번 total) */
+  const T = targets(size || total, share), cov = init ? Float32Array.from(init) : new Float32Array(N) /* init: 이미 있는 장면들이 채운 몫 (이어서 모으기) */, picked = [], left = new Set(cands.map((_, i) => i))
   const gain = (c) => { let s = 0; for (let i = 0; i < N; i++) { const need = T[i] - cov[i]; if (need > 0) s += Math.min(c.d[i], need) } return s + beta * c.q }
   // 지연 탐욕: 이득은 줄어들기만 해서(부분 모듈러), 큐 맨 위만 다시 계산하면 돼요
   const heap = cands.map((c, i) => ({ i, g: gain(c) })).sort((a, b) => b.g - a.g)

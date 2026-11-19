@@ -10,7 +10,7 @@
 //  모델: CLIP ViT-B/32 (MIT, Xenova/clip-vit-base-patch32 · @huggingface/transformers) — 없으면 색 통계 + 출처 글자로 서술어를 정해요.
 import { mkdir, writeFile, readFile, readdir, stat } from 'node:fs/promises'
 import { join, dirname } from 'node:path'
-import { SOURCES, UA, isPano } from '../src/scene/factory/sources.js'
+import { SOURCES, UA, isPano, fetchRetry } from '../src/scene/factory/sources.js'
 import { gate } from '../src/scene/factory/quality.js'
 import { dedupe, curate, gapTerms } from '../src/scene/factory/curate.js'
 import { checkLicense } from '../src/scene/license.js'
@@ -23,7 +23,7 @@ const WORK = A.work || 'work', log = (...x) => console.log('[mass]', ...x)
 const rd = async (f, d) => { try { return JSON.parse(await readFile(f, 'utf8')) } catch (e) { return d } }
 const wr = async (f, o) => { await mkdir(dirname(f), { recursive: true }); await writeFile(f, JSON.stringify(o)) }
 let sharp = null; const img = async () => (sharp ||= (await import('sharp')).default)
-const get = async (url) => { if (/^(file:|\/)/.test(url)) return readFile(url.replace(/^file:\/\//, '')); const r = await fetch(url, { headers: { 'User-Agent': UA } }); if (!r.ok) throw new Error('HTTP ' + r.status); return Buffer.from(await r.arrayBuffer()) } /* 로컬 파일은 오프라인 시험용 */
+const get = async (url) => { if (/^(file:|\/)/.test(url)) return readFile(url.replace(/^file:\/\//, '')); const r = await fetchRetry(url); return Buffer.from(await r.arrayBuffer()) } /* 로컬 파일은 오프라인 시험용 */
 const pool = async (items, n, fn) => { let k = 0; await Promise.all(Array.from({ length: n }, async () => { while (k < items.length) { const i = k++; try { await fn(items[i], i) } catch (e) { items[i]._err = String(e.message || e).slice(0, 120) } } })) }
 
 // 출처 글자(제목 · 태그 · 설명) → 서술어 점수 (CLIP 없을 때 · 있을 때도 약하게 섞어요)
@@ -66,12 +66,14 @@ async function gateStage() {
     out.push(c)
   })
   log('관문:', out.length, '/', cands.length, '받음 · 통과', out.filter((c) => c.pass).length); await wr(join(WORK, 'scored.json'), out)
+  const by = {}; for (const c of cands) { const b = (by[c.src] = by[c.src] || { n: 0, got: 0, pass: 0, err: {} }); b.n++; if (c._err) { const k = c._err.split(' ').slice(0, 2).join(' '); b.err[k] = (b.err[k] || 0) + 1 } else if (out.includes(c)) { b.got++; if (c.pass) b.pass++ } }
+  for (const [k, b] of Object.entries(by)) log('관문 ·', k, `후보 ${b.n} · 받음 ${b.got} · 통과 ${b.pass}`, Object.keys(b.err).length ? '· 실패 ' + JSON.stringify(b.err) : '') /* 2회차: 출처별 숫자가 없어 위키미디어 전멸을 늦게 알았어요 */
 }
 async function curateStage() {
   const { unpack } = await import('../src/scene/descriptors.js'), all = await rd(join(WORK, 'scored.json'), [])
   const skies = all.filter((c) => c.sky && c.pass), places = dedupe(all.filter((c) => !c.sky && c.pass)).map((c) => ({ ...c, d: unpack(c.desc) }))
   const ex = A.existing ? await rd(A.existing, { scenes: [] }) : { scenes: [] }, have = new Set(ex.scenes.map((x) => x.id)), init = new Float32Array(N); for (const x of ex.scenes) { const q = unpack(x.desc); for (let i = 0; i < N; i++) init[i] += q[i] } /* 이어서 모으기: 이미 있는 장면이 채운 칸은 빼고 */
-  const fresh = places.filter((c) => !have.has(c.id)), room = Math.max(0, +(A.total || 2500) - (A.existing ? 0 : 0)), { picked, gaps } = curate(fresh, { total: room, init: ex.scenes.length ? init : null }); if (ex.scenes.length) log('이어서 모으기: 이미', ex.scenes.length, '장면 · 새 후보', fresh.length)
+  const fresh = places.filter((c) => !have.has(c.id)), room = Math.max(0, +(A.total || 2500) - (A.existing ? 0 : 0)), { picked, gaps } = curate(fresh, { total: room, size: room + ex.scenes.length, init: ex.scenes.length ? init : null }); if (ex.scenes.length) log('이어서 모으기: 이미', ex.scenes.length, '장면 · 새 후보', fresh.length)
   log('선별:', picked.length, '/', places.length, '(중복 뺀 뒤) · 하늘', skies.length, '· 빈 칸', gaps.length); for (const g of gaps.slice(0, 12)) log('  빈 칸', g.ko, `${g.have}/${g.want}`)
   await wr(join(WORK, 'selected.json'), picked.map(({ d, ...c }) => c)); await wr(join(WORK, 'gaps.json'), { gaps, terms: gapTerms(gaps) }); await wr(join(WORK, 'skies.json'), skies)
 }

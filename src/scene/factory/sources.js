@@ -6,6 +6,22 @@
 export const UA = 'djs-scene-factory/1.0 (+https://github.com/sin1311/djs-packs)'
 export const redact = (u) => String(u).replace(/(access_token|token|key)=[^&]*/gi, '$1=***') /* 공개 로그에 토큰이 찍히지 않게 (첫 실행에서 주소째 찍혔어요) */
 const J = async (fetch, url, o = {}) => { const r = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/json', ...(o.headers || {}) } }); if (!r.ok) throw new Error(`HTTP ${r.status} ${redact(url).slice(0, 80)}`); return r.json() }
+
+/* 위키미디어는 표준 미리보기 폭만 바로 줘요 (그 밖의 폭은 429 로 거절 → 2회차에서 위키미디어 1515곳이 다 받기 실패했어요) */
+export const WM_STEPS = [250, 330, 500, 960, 1280, 1920, 3840]
+export const wmThumb = (u, want) => { const w = WM_STEPS.reduce((b, x) => (Math.abs(x - want) < Math.abs(b - want) ? x : b), WM_STEPS[0]); return /\/\d+px-/.test(u || '') ? u.replace(/\/\d+px-/, `/${w}px-`) : u }
+/* 받기: 429 · 5xx 는 Retry-After(없으면 2·4·8초) 만큼 쉬고 다시 · 같은 호스트는 최소 간격을 둬요 (위키미디어 0.25초) */
+const lastAt = new Map(), GAP = { 'upload.wikimedia.org': 250, 'commons.wikimedia.org': 250 }
+export async function fetchRetry(url, { fetch: f = globalThis.fetch, tries = 4, wait = (ms) => new Promise((r) => setTimeout(r, ms)) } = {}) {
+  const host = (() => { try { return new URL(url).host } catch (e) { return '' } })()
+  for (let k = 0; ; k++) {
+    const gap = GAP[host] || 0; if (gap) { const t = Date.now(), next = Math.max(t, (lastAt.get(host) || 0) + gap); lastAt.set(host, next); if (next > t) await wait(next - t) }
+    const r = await f(url, { headers: { 'User-Agent': UA } })
+    if (r.ok) return r
+    if (k + 1 >= tries || !(r.status === 429 || r.status >= 500)) throw new Error('HTTP ' + r.status + ' ' + redact(String(url)).slice(0, 80))
+    const ra = +((r.headers && r.headers.get && r.headers.get('retry-after')) || 0); await wait(Math.min(60, ra || 2 ** (k + 1)) * 1000)
+  }
+}
 const strip = (h) => String(h || '').replace(/<[^>]+>/g, ' ').replace(/&[a-z]+;/g, ' ').replace(/\s+/g, ' ').trim()
 export const isPano = (w, h) => w > 0 && h > 0 && Math.abs(w / h - 2) < 0.04
 
@@ -39,18 +55,18 @@ export async function ambientcg(fetch, { limit = 1000 } = {}) {
 export const WM_CATS = ['Category:Equirectangular projections', 'Category:360° panoramas', 'Category:Spherical panoramas', 'Category:Equirectangular panoramas']
 export async function wikimedia(fetch, { terms = ['equirectangular'], per = 200, minW = 4000, cats = WM_CATS, perCat = 1500 } = {}) {
   const out = [], seen = new Set()
-  const take = (p) => { const ii = (p.imageinfo || [])[0]; if (!ii || seen.has(p.pageid)) return; seen.add(p.pageid); if (!/jpeg|png/.test(ii.mime || '') || !isPano(ii.width, ii.height) || ii.width < minW) return; const m = ii.extmetadata || {}, v = (k) => strip((m[k] || {}).value); out.push({ src: 'wikimedia', id: 'wm-' + p.pageid, title: p.title.replace(/^File:/, '').replace(/\.\w+$/, ''), author: v('Artist') || '?', license: v('LicenseShortName') || v('License'), source: ii.descriptionurl, url: ii.thumburl || ii.url, thumb: (ii.thumburl || ii.url || '').replace(/\/\d+px-/, '/1024px-'), w: ii.width, h: ii.height, text: [p.title, v('ImageDescription'), v('Categories')].join(' ').slice(0, 400) }) }
-  for (const c of cats) { let cont = {}; for (let got = 0; got < perCat;) { let j; try { j = await J(fetch, 'https://commons.wikimedia.org/w/api.php?' + new URLSearchParams({ action: 'query', format: 'json', generator: 'categorymembers', gcmtitle: c, gcmtype: 'file', gcmlimit: '50', prop: 'imageinfo', iiprop: 'url|size|mime|extmetadata', iiurlwidth: '4096', origin: '*', ...cont })) } catch (e) { console.log('[mass] wikimedia', c, '건너뜀:', String(e.message).slice(0, 60)); break } const pages = Object.values((j.query || {}).pages || {}); for (const p of pages) { take(p); got++ } if (!j.continue || !pages.length) break; cont = j.continue } } /* 360° 파노라마 분류에서 먼저 (검색어만으로는 164개뿐이었어요) */
+  const take = (p) => { const ii = (p.imageinfo || [])[0]; if (!ii || seen.has(p.pageid)) return; seen.add(p.pageid); if (!/jpeg|png/.test(ii.mime || '') || !isPano(ii.width, ii.height) || ii.width < minW) return; const m = ii.extmetadata || {}, v = (k) => strip((m[k] || {}).value); out.push({ src: 'wikimedia', id: 'wm-' + p.pageid, title: p.title.replace(/^File:/, '').replace(/\.\w+$/, ''), author: v('Artist') || '?', license: v('LicenseShortName') || v('License'), source: ii.descriptionurl, url: ii.thumburl || ii.url, thumb: wmThumb(ii.thumburl || ii.url || '', 960), w: ii.width, h: ii.height, text: [p.title, v('ImageDescription'), v('Categories')].join(' ').slice(0, 400) }) }
+  for (const c of cats) { let cont = {}; for (let got = 0; got < perCat;) { let j; try { j = await J(fetch, 'https://commons.wikimedia.org/w/api.php?' + new URLSearchParams({ action: 'query', format: 'json', generator: 'categorymembers', gcmtitle: c, gcmtype: 'file', gcmlimit: '50', prop: 'imageinfo', iiprop: 'url|size|mime|extmetadata', iiurlwidth: '3840', origin: '*', ...cont })) } catch (e) { console.log('[mass] wikimedia', c, '건너뜀:', String(e.message).slice(0, 60)); break } const pages = Object.values((j.query || {}).pages || {}); for (const p of pages) { take(p); got++ } if (!j.continue || !pages.length) break; cont = j.continue } } /* 360° 파노라마 분류에서 먼저 (검색어만으로는 164개뿐이었어요) */
   for (const t of terms) {
     let cont = {}
     for (let got = 0; got < per;) {
-      const q = new URLSearchParams({ action: 'query', format: 'json', generator: 'search', gsrsearch: `${t} equirectangular filetype:bitmap`, gsrnamespace: '6', gsrlimit: '50', prop: 'imageinfo', iiprop: 'url|size|mime|extmetadata', iiurlwidth: '4096', origin: '*', ...cont })
+      const q = new URLSearchParams({ action: 'query', format: 'json', generator: 'search', gsrsearch: `${t} equirectangular filetype:bitmap`, gsrnamespace: '6', gsrlimit: '50', prop: 'imageinfo', iiprop: 'url|size|mime|extmetadata', iiurlwidth: '3840', origin: '*', ...cont })
       let j; try { j = await J(fetch, 'https://commons.wikimedia.org/w/api.php?' + q) } catch (e) { break } const pages = Object.values((j.query || {}).pages || {})
       for (const p of pages) {
         const ii = (p.imageinfo || [])[0]; if (!ii || seen.has(p.pageid)) continue; seen.add(p.pageid); got++
         if (!/jpeg|png/.test(ii.mime || '') || !isPano(ii.width, ii.height) || ii.width < minW) continue
         const m = ii.extmetadata || {}, v = (k) => strip((m[k] || {}).value)
-        out.push({ src: 'wikimedia', id: 'wm-' + p.pageid, title: p.title.replace(/^File:/, '').replace(/\.\w+$/, ''), author: v('Artist') || '?', license: v('LicenseShortName') || v('License'), source: ii.descriptionurl, url: ii.thumburl || ii.url, thumb: (ii.thumburl || ii.url || '').replace(/\/\d+px-/, '/1024px-'), w: ii.width, h: ii.height, text: [p.title, v('ImageDescription'), v('Categories')].join(' ').slice(0, 400) })
+        out.push({ src: 'wikimedia', id: 'wm-' + p.pageid, title: p.title.replace(/^File:/, '').replace(/\.\w+$/, ''), author: v('Artist') || '?', license: v('LicenseShortName') || v('License'), source: ii.descriptionurl, url: ii.thumburl || ii.url, thumb: wmThumb(ii.thumburl || ii.url || '', 960), w: ii.width, h: ii.height, text: [p.title, v('ImageDescription'), v('Categories')].join(' ').slice(0, 400) })
       }
       if (!j.continue || !pages.length) break; cont = j.continue
     }
