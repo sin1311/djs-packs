@@ -22,7 +22,7 @@ jobs:
           git clone --depth 1 https://github.com/caozidong/PanDA PanDA
           head -5 PanDA/LICENSE
           pip install -q torch torchvision --index-url https://download.pytorch.org/whl/cpu
-          pip install -q einops pyyaml opencv-python-headless onnx
+          pip install -q einops pyyaml opencv-python-headless onnx onnxscript safetensors matplotlib pillow
           mkdir -p models
           curl -fL -o models/panda_small.pth "https://huggingface.co/ZidongC/PanDA/resolve/main/panda_small.pth?download=true"
           python scripts/export-panda.py "$(pwd)/models/panda_small.pth"
