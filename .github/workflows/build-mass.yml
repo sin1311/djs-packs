@@ -1,0 +1,123 @@
+# 대량 장면 공장 (v1.0-D): Actions 탭 → build-mass → Run workflow (사람이 시작해요)
+#  후보 5000곳 이상(Poly Haven · ambientCG · 위키미디어 공용 · Panoramax · Mapillary) → 라이선스 검사 → 품질 관문 → 분위기 칸 채우기로 선별
+#  → 20개 작업이 나눠 만들기(깊이 · 지면 캘리브레이션 · LDI) → 합치기. 두 번째부터는 "이어서 모으기": 이미 있는 장면은 두고, 지난번 빈 칸 검색어로 더 모아요.
+#  저장소: 비밀값 HF_TOKEN + 입력 hf_repo(예: 사용자/djs-scenes) 가 있으면 Hugging Face 데이터셋, 없으면 이 저장소의 가지(scenes-<회차>-<조각>).
+#  목록(index.json) · 빈 칸 보고서(gaps.json) · 하늘 도서관은 언제나 scenes 가지에도 둬요 (앱이 jsDelivr · GitHub 에서 받아요).
+name: build-mass
+on:
+  workflow_dispatch:
+    inputs:
+      total: { description: '이번에 고를 장면 수 (첫 회 2500 권장, 이어서 모으기면 더할 수)', default: '2500' }
+      target: { description: '모을 후보 수 (5000 이상 권장)', default: '6000' }
+      hf_repo: { description: 'Hugging Face 데이터셋 (사용자/이름). 비우면 GitHub 가지에 저장', default: '' }
+      resume: { description: '이어서 모으기 (scenes 가지의 기존 목록 · 빈 칸 검색어 사용)', default: 'true' }
+      size: { description: '등장방형 가로 화소', default: '2048' }
+permissions:
+  contents: write
+concurrency:
+  group: build-mass
+  cancel-in-progress: false
+env:
+  SHARDS: 20
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - name: 도구
+        run: |
+          npm i --no-save sharp@0.33.5 @huggingface/transformers@3.1.2
+          npm i --no-save --ignore-scripts onnxruntime-node@1.20.1
+      - name: 이어서 모으기 자료 (있으면)
+        if: ${{ github.event.inputs.resume == 'true' }}
+        run: |
+          mkdir -p prev
+          curl -fsL https://raw.githubusercontent.com/${{ github.repository }}/scenes/index.json -o prev/index.json || echo '{"scenes":[]}' > prev/index.json
+          curl -fsL https://raw.githubusercontent.com/${{ github.repository }}/scenes/gaps.json -o prev/gaps.json || echo '{"terms":[]}' > prev/gaps.json
+          node -e "const x=require('./prev/index.json');console.log('기존 장면',(x.scenes||[]).length)"
+      - name: 수집 · 품질 관문 · 선별
+        env:
+          MAPILLARY_TOKEN: ${{ secrets.MAPILLARY_TOKEN }}
+        run: |
+          EX=""; GP=""; if [ -f prev/index.json ]; then EX="--existing prev/index.json"; GP="--gaps prev/gaps.json"; fi
+          node scripts/scene-mass.mjs --stage catalog --target "${{ github.event.inputs.target }}" $GP
+          node scripts/scene-mass.mjs --stage gate --clip --conc 8
+          node scripts/scene-mass.mjs --stage curate --total "${{ github.event.inputs.total }}" $EX
+          node scripts/scene-mass.mjs --stage skies --out out/skies
+          cat work/gaps.json | head -c 3000
+      - uses: actions/upload-artifact@v4
+        with: { name: work, path: work/ }
+      - uses: actions/upload-artifact@v4
+        with: { name: skies, path: out/skies/ }
+      - uses: actions/upload-artifact@v4
+        with: { name: prev, path: prev/, if-no-files-found: ignore }
+  build:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - uses: actions/download-artifact@v4
+        with: { name: work, path: work/ }
+      - name: 도구 · 모델 (Depth Anything V2 Small = Apache-2.0 · YuNet = MIT)
+        run: |
+          npm i --no-save sharp@0.33.5
+          npm i --no-save --ignore-scripts onnxruntime-node@1.20.1
+          mkdir -p models
+          curl -fL -o models/dav2s.onnx https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/main/onnx/model.onnx
+          curl -fL -o models/yunet.onnx https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx
+      - name: 장면 만들기 (조각 ${{ matrix.shard }})
+        run: node scripts/scene-mass.mjs --stage build --shard ${{ matrix.shard }}/$SHARDS --out out/scenes-r${{ github.run_number }}-${{ matrix.shard }} --size "${{ github.event.inputs.size }}" --depth models/dav2s.onnx --face models/yunet.onnx
+      - name: 올리기 (Hugging Face 또는 GitHub 가지)
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          D=out/scenes-r${{ github.run_number }}-${{ matrix.shard }}; B=$(basename $D)
+          if [ -n "$HF_TOKEN" ] && [ -n "${{ github.event.inputs.hf_repo }}" ]; then
+            pip install -q -U huggingface_hub
+            for k in 1 2 3 4 5; do huggingface-cli upload "${{ github.event.inputs.hf_repo }}" "$D" "$B" --repo-type dataset --commit-message "장면 $B" && break; sleep $((k * 20)); done
+          else
+            git config --global user.name 'github-actions[bot]'; git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+            cp README.md "$D/README.md"; (cd "$D" && git init -q -b "$B" && git add -A && git commit -q -m "장면 $B" && git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" "$B")
+          fi
+          mkdir -p parts/$B && cp $D/part.json parts/$B/part.json
+      - uses: actions/upload-artifact@v4
+        with: { name: 'part-${{ matrix.shard }}', path: parts/ }
+  merge:
+    needs: build
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - uses: actions/download-artifact@v4
+        with: { pattern: 'part-*', path: out/, merge-multiple: true }
+      - uses: actions/download-artifact@v4
+        with: { name: skies, path: out/skies/ }
+      - uses: actions/download-artifact@v4
+        with: { name: work, path: work/ }
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with: { name: prev, path: prev/ }
+      - name: 합치기 · scenes 가지에 목록 올리기
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          EX=""; [ -f prev/index.json ] && EX="--existing prev/index.json"
+          HF=""; [ -n "$HF_TOKEN" ] && [ -n "${{ github.event.inputs.hf_repo }}" ] && HF="--base-hf ${{ github.event.inputs.hf_repo }}"
+          node scripts/scene-mass.mjs --stage merge --partsDir out $EX $HF --out out/scenes
+          mkdir -p site && cp out/scenes/index.json work/gaps.json site/ && cp -r out/skies site/skies && cp README.md site/README.md
+          git config --global user.name 'github-actions[bot]'; git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          (cd site && git init -q -b scenes && git add -A && git commit -q -m "장면 목록 (회차 ${{ github.run_number }})" && git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" scenes)
+          node -e "const x=require('./out/scenes/index.json');console.log('전체 장면',x.count,'· 하늘',x.skies.length)"

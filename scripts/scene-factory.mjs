@@ -10,6 +10,8 @@
 import { createHash } from 'node:crypto'
 import { mkdir, writeFile, readFile, rename } from 'node:fs/promises'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
+import { UA } from '../src/scene/factory/sources.js'
 import { SYNTH, renderSynth } from '../src/scene/factory/synth.js'
 import { faceRGB, simDepthFaces, alignFaces, mergeFaces, FOV } from '../src/scene/factory/depth.js'
 import { fitGroundPano, toMetric } from '../src/scene/factory/ground.js'
@@ -63,7 +65,8 @@ async function sources() {
 }
 async function loadRGB(s) {
   if (s.kind === 'synthetic') { const o = renderSynth(s.make(SEED), W, H); return { rgb: o.rgb, truth: o.r, h: o.h } }
-  const buf = Buffer.from(await (await fetch(s.url)).arrayBuffer()), { data } = await (await img())(buf).resize(W, H, { fit: 'fill' }).removeAlpha().raw().toBuffer({ resolveWithObject: true })
+  let buf; if (/^(file:|\/)/.test(s.url)) buf = await readFile(s.url.replace(/^file:\/\//, '')); else { const res = await fetch(s.url, { headers: { 'User-Agent': UA } }); if (!res.ok) throw new Error('HTTP ' + res.status + ' ' + String(s.url).slice(0, 80)); buf = Buffer.from(await res.arrayBuffer()) } /* 로컬 파일은 오프라인 시험용 */
+  const { data } = await (await img())(buf).resize(W, H, { fit: 'fill' }).removeAlpha().raw().toBuffer({ resolveWithObject: true })
   return { rgb: new Uint8Array(data), truth: null, h: s.h || 1.6 }
 }
 // 얼굴(YuNet) · 번호판(후보) 찾기 → 등장방형 상자. 합성 장면은 사람 · 번호판이 없어서 건너뛰어요(보고서에 그렇게 적어요)
@@ -75,7 +78,7 @@ async function privacy(s, rgb) {
     const ort = await import('onnxruntime-node'), sess = await ort.InferenceSession.create(A.face), S = 640
     for (let i = 0; i < 6; i++) { const f = faceRGB(rgb, W, H, i, S), t = new Float32Array(3 * S * S); for (let p = 0; p < S * S; p++) for (let c = 0; c < 3; c++) t[c * S * S + p] = f[p * 3 + (2 - c)] /* BGR */; const out = await sess.run({ [sess.inputNames[0]]: new ort.Tensor('float32', t, [1, 3, S, S]) }); for (const b of yunetDecode(out, S)) { boxes.push(toEq(i, { x: b.x - b.w * 0.2, y: b.y - b.h * 0.2, w: b.w * 1.4, h: b.h * 1.4 }, S)); faces++ } }
   } else if (s.kind !== 'synthetic') log('경고: --face 모델이 없어 얼굴을 찾지 못했어요 → 이 장면은 사람 확인 목록에 올라가요')
-  const N = 512, plates = []; for (let i = 0; i < 6; i++) if (i !== 2) for (const b of plateCandidates(faceRGB(rgb, W, H, i, N), N, N)) plates.push(toEq(i, b, N))
+  const N = 512, plates = []; if (!s.blurred) for (let i = 0; i < 6; i++) if (i !== 2) for (const b of plateCandidates(faceRGB(rgb, W, H, i, N), N, N)) plates.push(toEq(i, b, N))
   return { rgb: blurBoxes(rgb, W, H, [...boxes, ...plates]), faces, plates: plates.length, review: !A.face, note: '번호판 후보 ' + plates.length + '곳을 흐렸어요 (휴리스틱 — report.json 에서 확인)' }
 }
 // 깊이: 실제 모델(Depth Anything V2 Small) 또는 합성 장면의 정답 흉내
@@ -85,6 +88,7 @@ async function depthFaces(s, rgb, truth) {
     for (let i = 0; i < 6; i++) { const f = faceRGB(rgb, W, H, i, FN), t = new Float32Array(3 * FN * FN); for (let p = 0; p < FN * FN; p++) for (let c = 0; c < 3; c++) t[c * FN * FN + p] = (f[p * 3 + c] / 255 - M[c]) / SD[c]; const o = await sess.run({ [sess.inputNames[0]]: new ort.Tensor('float32', t, [1, 3, FN, FN]) }); faces.push(Float32Array.from(o[sess.outputNames[0]].data)) }
     return { faces, how: 'Depth Anything V2 Small (ONNX · CPU)' }
   }
+  if (!truth && A['fake-depth']) { const Wd = W, Hd = H, r = new Float32Array(Wd * Hd); for (let y = 0; y < Hd; y++) { const lat = (0.5 - (y + 0.5) / Hd) * Math.PI; for (let x = 0; x < Wd; x++) r[y * Wd + x] = lat < -0.05 ? Math.min(30, 1.6 / Math.sin(-lat)) : lat < 0.35 ? 30 : Infinity } return { faces: simDepthFaces(r, Wd, Hd, FN, { seed: SEED, noise: 0.01 }).faces, how: '시험 전용 가짜 깊이 (지면 + 30m 벽) — 실제 장면에 쓰지 않아요' } }
   if (!truth) throw new Error('깊이 모델(--depth)이 필요해요: ' + s.id)
   return { faces: simDepthFaces(truth, W, H, FN, { seed: SEED + 11, noise: 0.01 }).faces, how: '합성: 정답 거리에 면마다 다른 아핀 왜곡 + 잡음 1% (깊이 모델 흉내)' }
 }
@@ -107,10 +111,13 @@ async function build(s) {
     const c = await (await img())(Buffer.from(L.layers[k].rgba), { raw: { width: W, height: H, channels: 4 } }).webp({ quality: +(A.q || 82), alphaQuality: 90, effort: 6 }).toBuffer(), dd = await encodeDist(L.layers[k].r)
     const cn = `l${k}.webp`, dn = `l${k}-dist.png`; await writeFile(join(dir, cn), c); await writeFile(join(dir, dn), dd.buf); files[cn] = sha(c); files[dn] = sha(dd.buf); layers.push({ color: cn, dist: dn, rmin: dd.rmin, rmax: dd.rmax })
   }
-  const man = { format: 'djs-scene/1', id: s.id, name: s.name, kind: s.kind, label: s.kind === 'synthetic' ? '합성 시험 장면 · 실사 아님' : s.kind === 'reconstructed' ? '재구성 장면 · CC 자산' : '실제 장소 사진', theme: s.theme, size: [W, H], distSize: [W / DS, H / DS], h, ground: { S: cal.S, T: cal.T, inl: cal.inl }, cuts: L.cuts, layers, mood: s.mood, car: s.car ? { ahead: 9, side: s.theme === 'city' ? -1.8 : 0 } : null, sources: [{ title: s.title, author: s.author, license: lic.L, source: s.source, text: attribution(s) }], review: !!pv.review, files }
+  const man = { format: 'djs-scene/1', id: s.id, name: s.name, kind: s.kind, label: s.kind === 'synthetic' ? '합성 시험 장면 · 실사 아님' : s.kind === 'reconstructed' ? '재구성 장면 · CC 자산' : '실제 장소 사진 · 깊이는 AI 추정', ...(s.desc ? { desc: s.desc, stats: s.stats } : {}), theme: s.theme, size: [W, H], distSize: [W / DS, H / DS], h, ground: { S: cal.S, T: cal.T, inl: cal.inl }, cuts: L.cuts, layers, mood: s.mood, car: s.car ? { ahead: 9, side: s.theme === 'city' ? -1.8 : 0 } : null, sources: [{ title: s.title, author: s.author, license: lic.L, source: s.source, text: attribution(s) }], review: !!pv.review, files }
   await writeFile(join(dir, 'manifest.json'), JSON.stringify(man, null, 1)); rep.ms = Date.now() - t0; rep.bytes = Object.keys(files).length; log(s.id, JSON.stringify(rep))
   return { man, rep }
 }
+export { build, THEMES, loadRGB, img, sha }
+const MAIN = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href /* 다른 스크립트(scene-mass)가 불러 쓸 때는 아래를 돌리지 않아요 */
+if (MAIN) await (async () => {
 const list = await sources(), done = []; await mkdir(OUT, { recursive: true })
 for (const s of list) { try { const r = await build(s); if (r) done.push(r) } catch (e) { log('실패 (건너뜀):', s.id, String(e.message || e).slice(0, 200)) } }
 // 가지 나누기 (--shard <MB>): jsDelivr 는 가지 하나 50MB 까지라, 장면을 scenes-1, scenes-2 … 가지에 나눠 담고 목록(index.json)만 scenes 가지에 둬요
@@ -125,3 +132,4 @@ const index = { format: 'djs-scenes/1', scenes: done.map(({ man }) => ({ id: man
 const IX = A.shard ? join(OUT, 'scenes') : OUT
 await writeFile(join(IX, 'index.json'), JSON.stringify(index, null, 1)); await writeFile(join(IX, 'report.json'), JSON.stringify(done.map((d) => d.rep), null, 1))
 log('끝:', done.length, '/', list.length, '장면 →', OUT, A.shard ? '(가지 ' + new Set(Object.values(refOf)).size + '개)' : '')
+})()

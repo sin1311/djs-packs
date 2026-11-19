@@ -28,3 +28,9 @@ Actions 탭 → **build-packs** → **Run workflow**. 로컬에서는 `node scri
 - 모델: Depth Anything V2 **Small** (Apache-2.0 — Base/Large 는 비상업이라 쓰지 않아요) · YuNet 얼굴 검출 (MIT). 번호판은 휴리스틱 후보를 흐리고 사람 확인 목록(`report.json`)에 올려요.
 - 형식: `index.json` (djs-scenes/1) → 장면마다 `manifest.json` (djs-scene/1, 파일마다 sha256) · 층마다 색 `l<k>.webp`(알파 포함) · 거리 `l<k>-dist.png`(log 거리 16비트, R = 위 · G = 아래 8비트).
 - 장면 카드에는 "재구성 장면 · CC 자산" 처럼 정직하게 표시돼요. 출처 · 저작자는 manifest 의 `sources` 에 있어요.
+
+## 대량 장면 (v1.0-D) — Actions → **build-mass**
+- 후보 5000곳 이상(Poly Haven · ambientCG · 위키미디어 공용 · Panoramax · Mapillary) → 라이선스 · 품질 관문 → 분위기 서술어 72칸을 고르게 채우도록 선별(2000~3000곳) → 20개 작업이 나눠 만들어요.
+- 두 번째 실행부터는 이어서 모으기: 이미 있는 장면은 그대로 두고, 지난번 `gaps.json` 의 빈 칸 검색어로 더 모아요.
+- 저장소: 비밀값 `HF_TOKEN` + 입력 `hf_repo` 가 있으면 Hugging Face 데이터셋, 없으면 이 저장소의 가지(`scenes-r<회차>-<조각>`). 목록 · 빈 칸 보고서 · 하늘 도서관은 늘 `scenes` 가지.
+- (선택) 비밀값 `MAPILLARY_TOKEN`: Mapillary 거리 사진(CC BY-SA → SA 팩).
