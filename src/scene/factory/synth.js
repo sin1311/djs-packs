@@ -111,7 +111,7 @@ function club(seed) {
   }
 }
 export const SYNTH = {
-  city: { make: city, name: '노을 도시 도로', mood: { energy: 0.6, bpm: [80, 115], moods: ['bright', 'warm', 'chill'], genres: ['citypop', 'lofi', 'rnb', 'synthwave'] }, car: true },
-  market: { make: market, name: '겨울밤 광장 마켓', mood: { energy: 0.45, bpm: [70, 110], moods: ['warm', 'calm', 'dark'], genres: ['carol', 'jazz', 'ballad', 'acoustic', 'lofi'] }, car: false },
-  club: { make: club, name: '클럽', mood: { energy: 0.85, bpm: [118, 140], moods: ['dark', 'hype', 'bright'], genres: ['house', 'edm', 'techno', 'trap', 'hiphop'] }, car: false },
+  city: { make: city, name: '노을 도시 도로', mood: { energy: 0.6, bpm: [80, 120], moods: ['bright', 'calm'], genres: ['citypop', 'lofi', 'disco', 'kpop'] }, car: true },
+  market: { make: market, name: '겨울밤 광장 마켓', mood: { energy: 0.45, bpm: [60, 120], moods: ['calm', 'bright'], genres: ['carol', 'waltz', 'ballad', 'lofi'] }, car: false },
+  club: { make: club, name: '클럽', mood: { energy: 0.85, bpm: [118, 175], moods: ['energetic', 'dark'], genres: ['house', 'techno', 'dnb', 'trap', 'disco'] }, car: false },
 }

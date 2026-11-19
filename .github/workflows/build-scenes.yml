@@ -7,11 +7,17 @@ name: build-scenes
 on:
   workflow_dispatch:
     inputs:
+      count:
+        description: '주제마다 몇 개 (주제 10개 × 이 수 = 최대 장면 수). 5 → 최대 50곳'
+        default: '5'
+      themes:
+        description: '주제 (비우면 10개 모두): city nightcity daycity market club field forest coast industrial cozy'
+        default: ''
       ids:
-        description: 'Poly Haven HDRI id (비우면 주제별 자동 고르기). 예: "urban_street_01:city snowy_park_01:market"'
+        description: '(선택) 직접 고르기: "아이디:주제" 띄어쓰기로. 비우면 자동 고르기. 없는 아이디는 건너뛰어요'
         default: ''
       size:
-        description: '등장방형 가로 화소'
+        description: '등장방형 가로 화소 (2048 권장 · 1536 이면 용량 약 절반)'
         default: '2048'
 permissions:
   contents: write
@@ -21,7 +27,7 @@ concurrency:
 jobs:
   scenes:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 300
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -37,13 +43,15 @@ jobs:
           curl -fL -o models/dav2s.onnx https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/main/onnx/model.onnx
           curl -fL -o models/yunet.onnx https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx
           ls -la models
-      - name: 장면 만들기 · scenes 가지에 올리기
+      - name: 장면 만들기 · 가지에 나눠 올리기 (scenes = 목록, scenes-1 · scenes-2 … = 장면, 가지마다 40MB 이하)
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          IDS="${{ github.event.inputs.ids }}"
-          node scripts/scene-factory.mjs --source polyhaven ${IDS:+--ids "$IDS"} --size "${{ github.event.inputs.size }}" --depth models/dav2s.onnx --face models/yunet.onnx --out out/scenes
-          cat out/scenes/report.json
-          du -sh out/scenes
+          IDS="${{ github.event.inputs.ids }}"; THEMES="${{ github.event.inputs.themes }}"
+          node scripts/scene-factory.mjs --source polyhaven --count "${{ github.event.inputs.count }}" ${THEMES:+--themes "$THEMES"} ${IDS:+--ids "$IDS"} --size "${{ github.event.inputs.size }}" --shard 40 --depth models/dav2s.onnx --face models/yunet.onnx --out out
+          cat out/scenes/report.json | head -c 20000
+          du -sh out/*
+          REPO="https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
+          for d in out/scenes-*; do b=$(basename "$d"); cp README.md "$d/README.md"; (cd "$d" && git init -q -b "$b" && git add -A && git commit -q -m "장면 팩 $b" && git push -f "$REPO" "$b"); done
           cp README.md out/scenes/README.md
-          (cd out/scenes && git init -q -b scenes && git add -A && git commit -q -m "장면 팩" && git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" scenes)
+          (cd out/scenes && git init -q -b scenes && git add -A && git commit -q -m "장면 목록" && git push -f "$REPO" scenes)

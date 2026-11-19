@@ -8,7 +8,7 @@
 //  필요: npm i --no-save sharp onnxruntime-node (워크플로가 설치). 깊이 모델이 없으면 polyhaven 은 멈춰요(합성 장면만 정답 흉내로 돌아요).
 //  모델: Depth Anything V2 Small (Apache-2.0, onnx-community/depth-anything-v2-small) · YuNet (MIT, OpenCV Zoo) · LaMa(선택, --lama)
 import { createHash } from 'node:crypto'
-import { mkdir, writeFile, readFile } from 'node:fs/promises'
+import { mkdir, writeFile, readFile, rename } from 'node:fs/promises'
 import { join } from 'node:path'
 import { SYNTH, renderSynth } from '../src/scene/factory/synth.js'
 import { faceRGB, simDepthFaces, alignFaces, mergeFaces, FOV } from '../src/scene/factory/depth.js'
@@ -24,29 +24,38 @@ const sha = (b) => createHash('sha256').update(b).digest('hex')
 const log = (...x) => console.log('[scene]', ...x)
 let sharp = null; const img = async () => (sharp ||= (await import('sharp')).default)
 
-// Poly Haven 고르기: --ids 가 없으면 자산 목록(카테고리 · 태그)에서 주제마다 점수가 가장 높은 HDRI 를 골라요 (결정적 · 보고서에 기록)
+// Poly Haven 고르기: 자산 목록(카테고리 · 태그) 점수로 주제마다 위에서 --count 개 (HDRI 하나는 점수가 가장 높은 주제 하나에만). 결정적 · 보고서에 기록
+//  mood 는 앱의 장르 이름(gen/dna.js GNAME) · 분위기 이름(bright · dark · calm · energetic)과 같아야 장면 선택 점수가 맞아요
 const THEMES = {
-  city: { name: '노을 도시 도로', want: { urban: 3, street: 3, road: 2, sunset: 3, 'sun-set': 3, evening: 2, city: 2 }, avoid: { indoor: 5, studio: 5 } },
-  market: { name: '겨울밤 광장 마켓', want: { night: 3, snow: 3, winter: 3, urban: 2, square: 2, lights: 1 }, avoid: { indoor: 5, studio: 5 } },
-  club: { name: '클럽', want: { indoor: 3, night: 2, 'artificial light': 3, hall: 2, dark: 2 }, avoid: { outdoor: 3, nature: 3, skies: 3 } },
+  city: { name: '노을 도시', want: { urban: 3, street: 3, road: 2, city: 2, sunset: 3, evening: 2, dusk: 2 }, avoid: { indoor: 5, studio: 5, night: 2 }, car: true, mood: { energy: 0.6, bpm: [85, 120], moods: ['bright', 'calm'], genres: ['citypop', 'lofi', 'disco', 'kpop'] } },
+  nightcity: { name: '도시 야경', want: { urban: 3, city: 3, night: 4, lights: 2, street: 2 }, avoid: { indoor: 4, studio: 5, nature: 2 }, car: true, mood: { energy: 0.75, bpm: [88, 145], moods: ['dark', 'energetic'], genres: ['trap', 'boombap', 'house', 'techno', 'citypop'] } },
+  daycity: { name: '한낮 도심', want: { urban: 3, city: 3, building: 2, buildings: 2, sunny: 2, clear: 2, midday: 2, day: 1 }, avoid: { night: 4, sunset: 2, indoor: 5, studio: 5 }, car: true, mood: { energy: 0.75, bpm: [100, 132], moods: ['bright', 'energetic'], genres: ['kpop', 'disco', 'rock', 'reggaeton'] } },
+  market: { name: '겨울 · 축제 광장', want: { snow: 4, winter: 4, christmas: 4, market: 3, square: 2, night: 2 }, avoid: { studio: 2 }, mood: { energy: 0.45, bpm: [60, 120], moods: ['calm', 'bright'], genres: ['carol', 'waltz', 'ballad', 'lofi'] } },
+  club: { name: '클럽 · 공연장', want: { neon: 4, stage: 3, concert: 3, hall: 3, 'artificial light': 3, indoor: 2, studio: 1, night: 1 }, avoid: { outdoor: 3, nature: 3 }, mood: { energy: 0.9, bpm: [118, 175], moods: ['energetic', 'dark'], genres: ['house', 'techno', 'dnb', 'trap', 'disco'] } },
+  field: { name: '노을 들판', want: { sunset: 4, field: 3, meadow: 3, 'golden hour': 3, nature: 2, skies: 1 }, avoid: { urban: 3, indoor: 5, studio: 5 }, mood: { energy: 0.4, bpm: [60, 100], moods: ['calm', 'bright'], genres: ['ballad', 'lofi', 'waltz', 'citypop'] } },
+  forest: { name: '숲', want: { forest: 4, trees: 3, woods: 3, nature: 2 }, avoid: { urban: 3, indoor: 5, studio: 5 }, mood: { energy: 0.35, bpm: [55, 95], moods: ['calm', 'dark'], genres: ['ballad', 'waltz', 'lofi'] } },
+  coast: { name: '바다 · 해변', want: { beach: 4, sea: 4, coast: 3, ocean: 3, water: 2, sand: 2 }, avoid: { indoor: 5, studio: 5 }, mood: { energy: 0.65, bpm: [88, 125], moods: ['bright', 'energetic'], genres: ['reggaeton', 'citypop', 'disco', 'kpop'] } },
+  industrial: { name: '공장 · 폐허', want: { industrial: 4, abandoned: 3, warehouse: 3, factory: 3, parking: 2, construction: 2 }, avoid: { nature: 2 }, mood: { energy: 0.8, bpm: [85, 150], moods: ['dark', 'energetic'], genres: ['techno', 'rock', 'boombap', 'trap', 'dnb'] } },
+  cozy: { name: '아늑한 실내', want: { cozy: 4, room: 3, home: 3, living: 2, interior: 2, indoor: 2 }, avoid: { outdoor: 3, studio: 2 }, mood: { energy: 0.35, bpm: [60, 100], moods: ['calm', 'bright'], genres: ['lofi', 'ballad', 'waltz', 'carol'] } },
 }
+const COUNT = Math.max(1, +(A.count || 1)), ONLY = A.themes ? String(A.themes).split(/[\s,]+/).filter((t) => THEMES[t]) : Object.keys(THEMES)
 async function pickPolyHaven() {
-  const all = await (await fetch('https://api.polyhaven.com/assets?t=hdris')).json(), out = []
-  for (const [theme, T] of Object.entries(THEMES)) {
-    let best = null, bs = -1e9
-    for (const [id, a] of Object.entries(all)) { const words = [...(a.categories || []), ...(a.tags || [])].map((x) => String(x).toLowerCase()); let sc = 0; for (const w of words) { sc += T.want[w] || 0; sc -= T.avoid[w] || 0 } if (sc > bs || (sc === bs && id < best)) { bs = sc; best = id } }
-    if (best) out.push({ id: best, theme, score: bs })
+  const all = await (await fetch('https://api.polyhaven.com/assets?t=hdris')).json(), best = new Map()
+  for (const [id, a] of Object.entries(all)) {
+    const words = [...(a.categories || []), ...(a.tags || [])].map((x) => String(x).toLowerCase())
+    for (const theme of ONLY) { const T = THEMES[theme]; let sc = 0; for (const w of words) { sc += T.want[w] || 0; sc -= T.avoid[w] || 0 } const b = best.get(id); if (sc > 0 && (!b || sc > b.score)) best.set(id, { id, theme, score: sc }) }
   }
-  return out
+  const out = []; for (const theme of ONLY) out.push(...[...best.values()].filter((x) => x.theme === theme).sort((x, y) => y.score - x.score || (x.id < y.id ? -1 : 1)).slice(0, COUNT))
+  log('고른 HDRI:', out.map((x) => `${x.id}:${x.theme}(${x.score})`).join(' ')); return out
 }
 async function sources() {
   if (SRC === 'synthetic') return Object.entries(SYNTH).map(([id, s]) => ({ id, kind: 'synthetic', name: s.name, theme: id, mood: s.mood, car: s.car, license: 'CC0', author: 'AI 뮤직 DJ 스튜디오 장면 공장 (합성)', source: 'scripts/scene-factory.mjs', title: s.name + ' (합성 시험 장면)', make: s.make }))
   if (SRC === 'polyhaven') {
-    const picks = A.ids ? String(A.ids).split(/[\s,]+/).filter(Boolean).map((x, i) => { const [id, theme] = x.split(':'); return { id, theme: theme || Object.keys(THEMES)[i % 3] } }) : await pickPolyHaven(), out = []
+    const picks = A.ids && A.ids !== '1' ? String(A.ids).split(/[\s,]+/).filter(Boolean).map((x, i) => { const [id, theme] = x.split(':'); return { id, theme: THEMES[theme] ? theme : ONLY[i % ONLY.length] } }) : await pickPolyHaven(), out = []
     for (const p of picks) {
-      const res = await fetch('https://api.polyhaven.com/info/' + p.id); if (!res.ok) { log('없는 HDRI:', p.id, res.status); continue }
-      const info = await res.json(), T = THEMES[p.theme] || THEMES.city /* Poly Haven 은 모든 자산이 CC0 */
-      out.push({ id: p.id, kind: 'reconstructed', name: T.name, theme: p.theme, h: 1.6, mood: SYNTH[p.theme] ? SYNTH[p.theme].mood : SYNTH.city.mood, car: p.theme === 'city', license: 'CC0', author: Object.keys(info.authors || {}).join(', ') || 'Poly Haven', source: 'https://polyhaven.com/a/' + p.id, title: info.name || p.id, url: `https://dl.polyhaven.org/file/ph-assets/HDRIs/extra/Tonemapped%20JPG/${p.id}.jpg`, pick: p })
+      const res = await fetch('https://api.polyhaven.com/info/' + p.id); if (!res.ok) { log('없는 HDRI (건너뜀):', p.id, res.status); continue }
+      const info = await res.json(), T = THEMES[p.theme] /* Poly Haven 은 모든 자산이 CC0 */
+      out.push({ id: p.id, kind: 'reconstructed', name: `${T.name} · ${info.name || p.id}`, theme: p.theme, h: 1.6, mood: T.mood, car: !!T.car, license: 'CC0', author: Object.keys(info.authors || {}).join(', ') || 'Poly Haven', source: 'https://polyhaven.com/a/' + p.id, title: info.name || p.id, url: `https://dl.polyhaven.org/file/ph-assets/HDRIs/extra/Tonemapped%20JPG/${p.id}.jpg`, pick: p })
     }
     return out
   }
@@ -103,7 +112,16 @@ async function build(s) {
   return { man, rep }
 }
 const list = await sources(), done = []; await mkdir(OUT, { recursive: true })
-for (const s of list) { const r = await build(s); if (r) done.push(r) }
-const index = { format: 'djs-scenes/1', scenes: done.map(({ man }) => ({ id: man.id, name: man.name, kind: man.kind, label: man.label, theme: man.theme, mood: man.mood, review: man.review, manifest: man.id + '/manifest.json', sha: sha(JSON.stringify(man, null, 1)) })) }
-await writeFile(join(OUT, 'index.json'), JSON.stringify(index, null, 1)); await writeFile(join(OUT, 'report.json'), JSON.stringify(done.map((d) => d.rep), null, 1))
-log('끝:', done.length, '장면 →', OUT)
+for (const s of list) { try { const r = await build(s); if (r) done.push(r) } catch (e) { log('실패 (건너뜀):', s.id, String(e.message || e).slice(0, 200)) } }
+// 가지 나누기 (--shard <MB>): jsDelivr 는 가지 하나 50MB 까지라, 장면을 scenes-1, scenes-2 … 가지에 나눠 담고 목록(index.json)만 scenes 가지에 둬요
+const refOf = {}
+if (A.shard) {
+  const lim = +A.shard * 1048576; let k = 1, used = 0
+  for (const { man } of done) { const sz = (await Promise.all(Object.keys(man.files).concat('manifest.json').map(async (f) => (await readFile(join(OUT, man.id, f))).length))).reduce((x, y) => x + y, 0); if (used && used + sz > lim) { k++; used = 0 } used += sz; refOf[man.id] = 'scenes-' + k }
+  for (const { man } of done) { const to = join(OUT, refOf[man.id]); await mkdir(to, { recursive: true }); await rename(join(OUT, man.id), join(to, man.id)) }
+  await mkdir(join(OUT, 'scenes'), { recursive: true })
+}
+const index = { format: 'djs-scenes/1', scenes: done.map(({ man }) => ({ id: man.id, name: man.name, kind: man.kind, label: man.label, theme: man.theme, mood: man.mood, review: man.review, ...(refOf[man.id] ? { ref: refOf[man.id] } : {}), manifest: man.id + '/manifest.json', sha: sha(JSON.stringify(man, null, 1)) })) }
+const IX = A.shard ? join(OUT, 'scenes') : OUT
+await writeFile(join(IX, 'index.json'), JSON.stringify(index, null, 1)); await writeFile(join(IX, 'report.json'), JSON.stringify(done.map((d) => d.rep), null, 1))
+log('끝:', done.length, '/', list.length, '장면 →', OUT, A.shard ? '(가지 ' + new Set(Object.values(refOf)).size + '개)' : '')
