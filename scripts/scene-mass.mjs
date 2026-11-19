@@ -235,6 +235,30 @@ async function calibLevel() {
   const raw = samples.filter((x) => x.tol === 0.012 && !x.none), byDeg = {}; for (const x of raw) { const k = x.deg === 0 ? '0' : x.deg < 5 ? '1-5' : '5-12'; (byDeg[k] = byDeg[k] || []).push(x.err) } for (const [k, v] of Object.entries(byDeg)) { v.sort((a, b) => a - b); log(`  잰 오차 (기울기 ${k}°) 중앙/90%:`, v[v.length >> 1], '/', v[Math.floor(v.length * 0.9)], `(${v.length})`) }
   await wr(join(WORK, 'calib-level.json'), { best: good[0] || null, current: cur, top: good.slice(0, 20), ground: { best: ggood[0] || null, top: ggood.slice(0, 20), all: grows }, samples })
 }
-const ST = { 'calib-level': calibLevel, 'synth-skies': synthSkies, 'synth-shots': synthShots, catalog, gate: gateStage, curate: curateStage, build: buildStage, merge: mergeStage, skies: skiesStage }
+// 깊이 A/B (try-panda 워크플로): 지금(Depth Anything V2 Small · 큐브 6면 + 면 맞춤) vs PanDA-Small(등장방형 한 번) — 같은 Poly Haven 사진으로
+//  · 지면 맞춤 비율(반듯한 사진) · 면 경계 이음매(경계 화소의 log 깊이 기울기 ÷ 다른 곳) · 아는 기울기(6°)에서 깊이 수평 오차 · 걸린 시간
+async function abDepth() {
+  const L = await import('../src/scene/factory/level.js'), { fitGroundPano } = await import('../src/scene/factory/ground.js'), { dirOf } = await import('../src/scene/geom.js'), ort = await import('onnxruntime-node')
+  process.argv.push('--size', '1024', '--out', join(WORK, 'ab-tmp')); const F = await import('./scene-factory.mjs'), ps = await ort.InferenceSession.create(A.panda), W = 1024, H = 512, n = +(A.n || 60)
+  const R = (() => { let a = 9; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296 } })()
+  const list = (await SOURCES.polyhaven(fetch)).filter((c) => !c.sky).sort(() => R() - 0.5).slice(0, n), out = []
+  const pandaG = async (rgb) => { const PW = 1008, PH = 504, im = new Uint8Array(await (await img())(Buffer.from(rgb), { raw: { width: W, height: H, channels: 3 } }).resize(PW, PH, { fit: 'fill' }).raw().toBuffer()), t = new Float32Array(3 * PW * PH), M = [0.485, 0.456, 0.406], SD = [0.229, 0.224, 0.225]
+    for (let p = 0; p < PW * PH; p++) for (let c = 0; c < 3; c++) t[c * PW * PH + p] = (im[p * 3 + c] / 255 - M[c]) / SD[c]
+    const o = await ps.run({ [ps.inputNames[0]]: new ort.Tensor('float32', t, [1, 3, PH, PW]) }), dd = o[ps.outputNames[0]].data, g = new Float32Array(W * H)
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const fx = Math.min(PW - 1.001, ((x + 0.5) * PW) / W - 0.5), fy = Math.min(PH - 1.001, Math.max(0, ((y + 0.5) * PH) / H - 0.5)), x0 = Math.max(0, Math.floor(fx)), y0 = Math.floor(fy), ax = fx - x0, ay = fy - y0
+      const v = (dd[y0 * PW + x0] * (1 - ax) + dd[y0 * PW + x0 + 1] * ax) * (1 - ay) + (dd[(y0 + 1) * PW + x0] * (1 - ax) + dd[(y0 + 1) * PW + x0 + 1] * ax) * ay; g[y * W + x] = 1 / Math.max(1e-3, v) } return g }
+  const seam = (g) => { const d = [0, 0, 0]; let sb = 0, nb = 0, so = 0, no = 0; for (let y = 2; y < H - 2; y++) for (let x = 0; x < W; x += 1) { dirOf((x + 0.5) / W, (y + 0.5) / H, d); const a = [Math.abs(d[0]), Math.abs(d[1]), Math.abs(d[2])].sort((p, q) => q - p), b = (a[0] - a[1]) / a[0] < 0.008, v = Math.abs(Math.log(Math.max(1e-6, g[y * W + (x + 1) % W])) - Math.log(Math.max(1e-6, g[y * W + x]))) + Math.abs(Math.log(Math.max(1e-6, g[(y + 1) * W + x])) - Math.log(Math.max(1e-6, g[y * W + x]))); if (!Number.isFinite(v)) continue; if (b) { sb += v; nb++ } else { so += v; no++ } } return nb && no ? (sb / nb) / (so / no) : 1 }
+  await pool(list, 2, async (c) => {
+    const buf = await get(c.thumb), rgb = new Uint8Array((await (await img())(buf).resize(W, H, { fit: 'fill' }).removeAlpha().raw().toBuffer({ resolveWithObject: true })).data)
+    const deg = 6, az = R() * Math.PI * 2, rr = (deg * Math.PI) / 180, vt = [Math.sin(rr) * Math.cos(az), Math.cos(rr), Math.sin(rr) * Math.sin(az)], Mx = L.levelRotation(vt), tl = L.rotateEquirect(rgb, W, H, [Mx[0], Mx[3], Mx[6], Mx[1], Mx[4], Mx[7], Mx[2], Mx[5], Mx[8]])
+    const row = { id: c.id }
+    for (const [k, fn] of [['faces', (im) => F.depthG(im)], ['panda', pandaG]]) { const t0 = Date.now(), g = await fn(rgb), ms = Date.now() - t0, cal = fitGroundPano(g, W, H), gt = await fn(tl), u = L.groundUp(gt, W, H); row[k] = { inl: cal ? +cal.inl.toFixed(3) : 0, seam: +seam(g).toFixed(2), err: u ? +((Math.acos(Math.min(1, Math.abs(u.up[0] * vt[0] + u.up[1] * vt[1] + u.up[2] * vt[2]))) * 180) / Math.PI).toFixed(2) : 99, gInl: u ? +u.inl.toFixed(3) : 0, ms } }
+    out.push(row)
+  })
+  const med = (k, f) => { const v = out.map((r) => r[k][f]).sort((a, b) => a - b); return [v[v.length >> 1], v[Math.floor(v.length * 0.9)]] }
+  for (const k of ['faces', 'panda']) log(`A/B ${k}: 지면 맞춤 중앙/90% ${med(k, 'inl')} · 이음매 비율 ${med(k, 'seam')} · 6° 수평 오차 ${med(k, 'err')} · 시간(ms) ${med(k, 'ms')} · 지면 맞춤 0.3 미만 ${out.filter((r) => r[k].inl < 0.3).length}/${out.length}`)
+  await wr(join(WORK, 'ab-depth.json'), out)
+}
+const ST = { 'ab-depth': abDepth, 'calib-level': calibLevel, 'synth-skies': synthSkies, 'synth-shots': synthShots, catalog, gate: gateStage, curate: curateStage, build: buildStage, merge: mergeStage, skies: skiesStage }
 for (const s of String(A.stage || 'catalog').split(',')) { if (!ST[s]) throw new Error('모르는 --stage ' + s); log('==', s); await ST[s]() }
 void isPano

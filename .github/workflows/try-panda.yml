@@ -1,0 +1,43 @@
+# 깊이 A/B (사람이 시작): PanDA-Small(360° 깊이 · Apache-2.0)을 ONNX 로 바꾸고, 지금 깊이(Depth Anything V2 Small 6면)와 같은 Poly Haven 사진으로 비교해요.
+#  결과: 로그의 "A/B" 두 줄 + 아티팩트 try-panda (ab-depth.json · panda_small.onnx). 장면을 만들거나 올리지 않아요.
+name: try-panda
+on:
+  workflow_dispatch:
+    inputs:
+      n: { description: '사진 수', default: '60' }
+permissions:
+  contents: read
+jobs:
+  ab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - name: PanDA 받기 · ONNX 로 바꾸기
+        run: |
+          git clone --depth 1 https://github.com/caozidong/PanDA PanDA
+          head -5 PanDA/LICENSE
+          pip install -q torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          pip install -q einops pyyaml opencv-python-headless onnx
+          mkdir -p models
+          curl -fL -o models/panda_small.pth "https://huggingface.co/ZidongC/PanDA/resolve/main/panda_small.pth?download=true"
+          python scripts/export-panda.py "$(pwd)/models/panda_small.pth"
+      - name: 도구 · 지금 깊이 모델
+        run: |
+          npm init -y > /dev/null
+          ONNXRUNTIME_NODE_INSTALL_CUDA=skip npm i sharp@0.33.5 onnxruntime-node@1.20.1
+          curl -fL -o models/dav2s.onnx https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/main/onnx/model.onnx
+      - name: A/B
+        run: node scripts/scene-mass.mjs --stage ab-depth --n "${{ github.event.inputs.n }}" --depth models/dav2s.onnx --panda models/panda_small.onnx
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: try-panda
+          if-no-files-found: ignore
+          path: |
+            work/ab-depth.json
+            models/panda_small.onnx
