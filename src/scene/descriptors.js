@@ -107,3 +107,11 @@ export function pack(q, keep = 4) { const out = []; for (const [g] of GROUPS) { 
 export function unpack(arr) { const q = new Float32Array(N), has = new Uint8Array(N); for (const [i, w] of arr || []) { q[i] = w / 255; has[i] = 1 } for (const [g] of GROUPS) { const [a, b] = RANGE[g]; let s = 0, miss = 0; for (let i = a; i < b; i++) { s += q[i]; if (!has[i]) miss++ } const rest = Math.max(0.005 * (b - a), 1 - s); for (let i = a; i < b; i++) if (!has[i]) q[i] = miss ? rest / miss : 0; let t = 0; for (let i = a; i < b; i++) t += q[i]; for (let i = a; i < b; i++) q[i] /= t } return q } /* 남은 몫만 빠진 서술어에 나눠요 */
 export function bridge(p, q) { let s = 0; for (const [g, , w] of GROUPS) { const [a, b] = RANGE[g]; let bc = 0; for (let i = a; i < b; i++) bc += Math.sqrt(p[i] * q[i]); s += w * bc } return s }
 export function topDesc(q, k = 4) { return DESC.map((d, i) => [d, q[i], GROUPS.find((x) => x[0] === d.g)[2]]).sort((a, b) => b[1] * b[2] - a[1] * a[2]).slice(0, k).map(([d, w]) => ({ id: d.g + ':' + d.id, ko: d.ko, w: +w.toFixed(2) })) }
+// v1.1 ② CLAP(오디오 ↔ 글) 용 서술어 문장: 장면 쪽 문장(사진 묘사)을 "음악" 묘사로 바꿔요. 글 임베딩은 Actions(clap-prep)에서 미리 계산해 앱에 실어요.
+export function audioPrompt(d) {
+  const p = d.prompt.replace(/^(a|an) /, '')
+  if (d.g === 'mood') return `${d.prompt} music`
+  if (d.g === 'place') return `music that fits ${d.prompt}`
+  if (d.g === 'color') return `music that feels ${d.prompt.replace(/^in /, 'like ')}`
+  return `music for a scene ${p}`
+}

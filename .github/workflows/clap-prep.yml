@@ -1,0 +1,24 @@
+# v1.1 ② CLAP 준비 (사람/클로드가 시작): 라이선스 확인 · 서술어 글 임베딩 · 시험 기준값 · 오디오 모델(q8) → models 가지 (앱이 jsDelivr · raw 로 받아요)
+name: clap-prep
+on: { workflow_dispatch: {} }
+permissions:
+  contents: write
+jobs:
+  prep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: 도구
+        run: |
+          npm init -y > /dev/null
+          npm pkg set type=module
+          ONNXRUNTIME_NODE_INSTALL_CUDA=skip npm i @huggingface/transformers@3.1.2
+      - name: 준비
+        run: node scripts/clap-prep.mjs
+      - name: models 가지에 올리기
+        run: |
+          git config --global user.name 'github-actions[bot]'; git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          cd models && git init -q -b models && git add -A && git commit -q -m "CLAP 준비물" && for k in 1 2 3 4; do git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" models && break; sleep $((k * 15)); done
