@@ -32,11 +32,11 @@ export function colorStats(rgb, W, H) {
 // 관문: { pass, score 0–1, why[], stats, hash }. meta = { w, h }
 export function gate(rgb, W, H, meta = {}, o = {}) {
   const minW = o.minW ?? 4000, g = grayOf(rgb, W, H), why = []
-  const res = clamp((meta.w || W) / minW), aspect = meta.w && meta.h ? Math.abs(meta.w / meta.h - 2) < 0.04 : Math.abs(W / H - 2) < 0.04
-  if (res < 1) why.push(`해상도 ${meta.w}px < ${minW}`); if (!aspect) why.push('2:1 이 아니에요 (등장방형 아님)')
+  const res = clamp((meta.w || W) / minW), ar = meta.w && meta.h ? meta.w / meta.h : W / H, aspect = o.shot ? ar >= 1.3 && ar <= 2.4 : Math.abs(ar - 2) < 0.04 /* o.shot: 인서트 컷(보통 가로 사진) — 이음새 · 삼각대 검사는 빼요 */
+  if (res < 1) why.push(`해상도 ${meta.w}px < ${minW}`); if (!aspect) why.push(o.shot ? '가로 사진(1.3~2.4:1)이 아니에요' : '2:1 이 아니에요 (등장방형 아님)')
   // 좌우 이음새: 첫 열과 끝 열의 차이 vs 보통 이웃 열 차이
   let seam = 0, nb = 0; for (let y = 0; y < H; y++) { seam += Math.abs(g[y * W] - g[y * W + W - 1]); nb += Math.abs(g[y * W + (W >> 1)] - g[y * W + (W >> 1) + 1]) + Math.abs(g[y * W + (W >> 2)] - g[y * W + (W >> 2) + 1]) } const seamR = seam / (nb / 2 + H * 0.5)
-  if (seamR > 3) why.push(`좌우 이음새가 안 맞아요 (×${seamR.toFixed(1)}) — 360° 가 아니에요`)
+  if (seamR > 3 && !o.shot) why.push(`좌우 이음새가 안 맞아요 (×${seamR.toFixed(1)}) — 360° 가 아니에요`)
   // 흐림: 라플라시안 분산 (가운데 띠, 극 근처는 늘어나서 제외)
   let ls = 0, ls2 = 0, ln = 0; for (let y = Math.floor(H * 0.3); y < H * 0.7; y++) for (let x = 1; x < W - 1; x++) { const i = y * W + x, v = g[i - 1] + g[i + 1] + g[i - W] + g[i + W] - 4 * g[i]; ls += v; ls2 += v * v; ln++ } const lapVar = ls2 / ln - (ls / ln) ** 2
   const sharp = clamp(Math.log10(lapVar + 1) / 2.4); if (lapVar < (o.blurMin ?? 50) && !o.sky) why.push(`흐려요 (라플라시안 분산 ${lapVar.toFixed(0)})`)
@@ -45,7 +45,7 @@ export function gate(rgb, W, H, meta = {}, o = {}) {
   let clip = 0, varL = 0, ent = 0; for (let v = 0; v < 256; v++) { const p = hist[v] / (W * H); if (v < 3 || v > 252) clip += p; varL += p * (v - m) ** 2; if (p > 0) ent -= p * Math.log2(p) }
   if (clip > 0.25) why.push(`노출이 날아갔어요 (${(clip * 100).toFixed(0)}%)`)
   // 삼각대 구멍: 바닥 5% 줄이 거의 검거나 거의 평평
-  let dark = 0, bn = 0, bs = 0, bs2 = 0; for (let y = Math.floor(H * 0.95); y < H; y++) for (let x = 0; x < W; x += 2) { const v = g[y * W + x]; if (v < 12) dark++; bs += v; bs2 += v * v; bn++ } const bstd = Math.sqrt(Math.max(0, bs2 / bn - (bs / bn) ** 2)), hole = clamp(Math.max(dark / bn, bstd < 2.5 ? 1 : 0))
+  let dark = 0, bn = 0, bs = 0, bs2 = 0; for (let y = Math.floor(H * 0.95); y < H; y++) for (let x = 0; x < W; x += 2) { const v = g[y * W + x]; if (v < 12) dark++; bs += v; bs2 += v * v; bn++ } const bstd = Math.sqrt(Math.max(0, bs2 / bn - (bs / bn) ** 2)), hole = o.shot ? 0 : clamp(Math.max(dark / bn, bstd < 2.5 ? 1 : 0))
   // 색감 (Hasler–Süsstrunk)
   let rgM = 0, ybM = 0, rg2 = 0, yb2 = 0, k = 0; for (let i = 0; i < W * H; i += 3) { const r = rgb[i * 3], gg = rgb[i * 3 + 1], b = rgb[i * 3 + 2], rg = r - gg, yb = 0.5 * (r + gg) - b; rgM += rg; ybM += yb; rg2 += rg * rg; yb2 += yb * yb; k++ } rgM /= k; ybM /= k
   const colorful = Math.sqrt(rg2 / k - rgM * rgM + yb2 / k - ybM * ybM) + 0.3 * Math.sqrt(rgM * rgM + ybM * ybM)

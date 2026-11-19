@@ -11,7 +11,7 @@ const J = async (fetch, url, o = {}) => { const r = await fetch(url, { headers: 
 export const WM_STEPS = [250, 330, 500, 960, 1280, 1920, 3840]
 export const wmThumb = (u, want) => { const w = WM_STEPS.reduce((b, x) => (Math.abs(x - want) < Math.abs(b - want) ? x : b), WM_STEPS[0]); return /\/\d+px-/.test(u || '') ? u.replace(/\/\d+px-/, `/${w}px-`) : u }
 /* 받기: 429 · 5xx 는 Retry-After(없으면 2·4·8초) 만큼 쉬고 다시 · 같은 호스트는 최소 간격을 둬요 (위키미디어 0.25초) */
-const lastAt = new Map(), GAP = { 'upload.wikimedia.org': 250, 'commons.wikimedia.org': 250 }
+const lastAt = new Map(), GAP = { 'upload.wikimedia.org': 250, 'commons.wikimedia.org': 250, 'api.openverse.org': 3200 /* 익명 요청은 분당 20번쯤까지 */ }
 export async function fetchRetry(url, { fetch: f = globalThis.fetch, tries = 4, wait = (ms) => new Promise((r) => setTimeout(r, ms)) } = {}) {
   const host = (() => { try { return new URL(url).host } catch (e) { return '' } })()
   for (let k = 0; ; k++) {

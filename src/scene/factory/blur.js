@@ -2,19 +2,20 @@
 //  · 흐림: 상자마다 타원 마스크(가장자리 부드럽게) 안을 강한 가우스로. 원본 화소가 남지 않게 두 번 흐리고 블록 평균도 섞어요(되돌리기 어렵게).
 //  · 찾기: Actions 에서 YuNet(얼굴, OpenCV Zoo · MIT) ONNX. 번호판은 아래 휴리스틱 후보(밝은 바탕 · 세로 경계가 촘촘한 가로 직사각형)를 흐리고,
 //    보고서에 "사람이 확인할 목록"으로 남겨요. 후보 검출은 완벽하지 않아서, CC-BY 거리 사진은 사람 확인 전에는 팩에 넣지 않아요(공장 규칙).
-export function blurBoxes(rgb, W, H, boxes, { ch = 3 } = {}) {
+export function blurBoxes(rgb, W, H, boxes, { ch = 3, wrap = true } = {}) { /* wrap: 360° 파노라마는 좌우가 이어져요 · 보통 사진(인서트 컷)은 false */
+  const X = (x) => (wrap ? ((x % W) + W) % W : Math.max(0, Math.min(W - 1, x)))
   const out = rgb.slice()
   for (const b of boxes) {
     const pad = Math.ceil(Math.max(b.w, b.h) * 0.25), x0 = Math.floor(b.x - pad), y0 = Math.max(0, Math.floor(b.y - pad)), x1 = Math.ceil(b.x + b.w + pad), y1 = Math.min(H, Math.ceil(b.y + b.h + pad)), bw = x1 - x0, bh = y1 - y0
     if (bw < 2 || bh < 2) continue
     const cell = Math.max(2, Math.round(Math.min(b.w, b.h) / 4)), sig = Math.max(2, Math.min(b.w, b.h) / 3), buf = new Float32Array(bw * bh * ch)
-    for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) { const xx = (((x0 + x) % W) + W) % W, i = ((y0 + y) * W + xx) * ch; for (let c = 0; c < ch; c++) buf[(y * bw + x) * ch + c] = rgb[i + c] }
+    for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) { const xx = X(x0 + x), i = ((y0 + y) * W + xx) * ch; for (let c = 0; c < ch; c++) buf[(y * bw + x) * ch + c] = rgb[i + c] }
     const blk = buf.slice(); for (let y = 0; y < bh; y += cell) for (let x = 0; x < bw; x += cell) for (let c = 0; c < ch; c++) { let s = 0, n = 0; for (let j = y; j < Math.min(bh, y + cell); j++) for (let i = x; i < Math.min(bw, x + cell); i++) { s += buf[(j * bw + i) * ch + c]; n++ } for (let j = y; j < Math.min(bh, y + cell); j++) for (let i = x; i < Math.min(bw, x + cell); i++) blk[(j * bw + i) * ch + c] = s / n }
     let cur = blk; for (let rep = 0; rep < 2; rep++) cur = gauss(cur, bw, bh, ch, sig)
     const cx = b.x + b.w / 2 - x0, cy = b.y + b.h / 2 - y0, rx = b.w / 2 + pad * 0.5, ry = b.h / 2 + pad * 0.5
     for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) {
       const e = Math.hypot((x - cx) / rx, (y - cy) / ry), m = e < 0.85 ? 1 : e > 1.15 ? 0 : (1.15 - e) / 0.3; if (m <= 0) continue
-      const xx = (((x0 + x) % W) + W) % W, i = ((y0 + y) * W + xx) * ch; for (let c = 0; c < ch; c++) out[i + c] = Math.round(rgb[i + c] * (1 - m) + cur[(y * bw + x) * ch + c] * m)
+      const xx = X(x0 + x), i = ((y0 + y) * W + xx) * ch; for (let c = 0; c < ch; c++) out[i + c] = Math.round(rgb[i + c] * (1 - m) + cur[(y * bw + x) * ch + c] * m)
     }
   }
   return out

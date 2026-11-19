@@ -17,6 +17,7 @@ import { faceRGB, simDepthFaces, alignFaces, mergeFaces, FOV } from '../src/scen
 import { fitGroundPano, toMetric } from '../src/scene/factory/ground.js'
 import { buildLDI } from '../src/scene/factory/ldi.js'
 import { blurBoxes, plateCandidates, plateKeep, yunetDecode } from '../src/scene/factory/blur.js'
+import { faceTiles, closeFace, mergeBoxes, normDisp, shotPlates } from '../src/scene/factory/shotkit.js'
 import { checkLicense, attribution } from '../src/scene/license.js'
 import { faceDir, uvOf } from '../src/scene/geom.js'
 
@@ -122,6 +123,48 @@ async function build(s) {
   await writeFile(join(dir, 'manifest.json'), JSON.stringify(man, null, 1)); rep.ms = Date.now() - t0; rep.bytes = Object.keys(files).length; log(s.id, JSON.stringify(rep))
   return { man, rep }
 }
+// --- 인서트 컷 (보통 사진: 멋진 차 · 사람들의 일상 · 곡 분위기에 맞는 순간) → djs-shot/1 ---
+//  색 c.webp (가로 최대 1920) + 상대 깊이 d.png (8비트, 가로세로 1/2, 가까울수록 밝음). 앱은 깊이로 살짝 입체감 있게 다가가요(2.5D).
+//  사생활: 얼굴은 원본 해상도 타일로 찾아 흐리고, 얼굴이 크게 나온 사진은 빼요. 차 번호판 후보는 크기로 걸러 흐려요.
+async function buildShot(s) {
+  const t0 = Date.now(), lic = checkLicense(s); if (!lic.ok) { log('거절', s.id, lic.why); return null }
+  const buf = /^(file:|\/)/.test(s.url) ? await readFile(s.url.replace(/^file:\/\//, '')) : Buffer.from(await (await fetchRetry(s.url)).arrayBuffer()), sh = await img(), meta = await sh(buf).metadata()
+  const SW = Math.min(1920, meta.width || 1920) & ~1, SH = Math.round(SW * (meta.height || SW / 1.6) / (meta.width || SW)) & ~1
+  if (SW / SH < 1.3 || SW / SH > 2.4) { log('컷 거절 (가로 사진 아님)', s.id); return null }
+  let rgb = new Uint8Array((await sh(buf).resize(SW, SH, { fit: 'fill' }).removeAlpha().raw().toBuffer({ resolveWithObject: true })).data)
+  const faces = []
+  if (A.face) {
+    const ort = await import('onnxruntime-node'), sess = await ort.InferenceSession.create(A.face), S = 640
+    for (const tl of faceTiles(SW, SH, S)) {
+      const t = new Float32Array(3 * S * S), cw = Math.round(tl.w / tl.s), chh = Math.round(tl.h / tl.s)
+      const tile = tl.s > 1 ? new Uint8Array((await sh(Buffer.from(rgb), { raw: { width: SW, height: SH, channels: 3 } }).resize(cw, chh, { fit: 'fill' }).raw().toBuffer())) : null
+      for (let y = 0; y < Math.min(S, chh); y++) for (let x = 0; x < Math.min(S, cw); x++) { const i = tile ? (y * cw + x) * 3 : ((tl.y + y) * SW + tl.x + x) * 3, src = tile || rgb; for (let c = 0; c < 3; c++) t[c * S * S + y * S + x] = src[i + (2 - c)] /* BGR */ }
+      const out = await sess.run({ [sess.inputNames[0]]: new ort.Tensor('float32', t, [1, 3, S, S]) })
+      for (const b of yunetDecode(out, S)) faces.push({ x: tl.x + (b.x - b.w * 0.2) * tl.s, y: tl.y + (b.y - b.h * 0.2) * tl.s, w: b.w * 1.4 * tl.s, h: b.h * 1.4 * tl.s, score: b.score })
+    }
+  } else log('경고: --face 모델이 없어 얼굴을 찾지 못했어요 → 이 컷은 사람 확인 목록에 올라가요')
+  const fb = mergeBoxes(faces); if (closeFace(fb, SW, SH)) { log('컷 거절 (얼굴이 크게 나온 인물 사진)', s.id); return null }
+  const pw = 1024, ph = Math.round(1024 * SH / SW), small = new Uint8Array(await sh(Buffer.from(rgb), { raw: { width: SW, height: SH, channels: 3 } }).resize(pw, ph, { fit: 'fill' }).raw().toBuffer()), k = SW / pw
+  const plates = s.blurred ? [] : shotPlates(plateCandidates(small, pw, ph).map((b) => ({ x: b.x * k, y: b.y * k, w: b.w * k, h: b.h * k, score: b.score })), SW, SH)
+  rgb = blurBoxes(rgb, SW, SH, [...fb, ...plates], { wrap: false })
+  let disp, how
+  if (A.depth) {
+    const ort = await import('onnxruntime-node'), sess = await ort.InferenceSession.create(A.depth), M = [0.485, 0.456, 0.406], SD = [0.229, 0.224, 0.225]
+    const sq = new Uint8Array(await sh(Buffer.from(rgb), { raw: { width: SW, height: SH, channels: 3 } }).resize(FN, FN, { fit: 'fill' }).raw().toBuffer()), t = new Float32Array(3 * FN * FN)
+    for (let p = 0; p < FN * FN; p++) for (let c = 0; c < 3; c++) t[c * FN * FN + p] = (sq[p * 3 + c] / 255 - M[c]) / SD[c]
+    const o = await sess.run({ [sess.inputNames[0]]: new ort.Tensor('float32', t, [1, 3, FN, FN]) }), raw = o[sess.outputNames[0]].data, n = Math.round(Math.sqrt(raw.length))
+    disp = { d: normDisp(raw), w: n, h: n }; how = 'Depth Anything V2 Small (ONNX · CPU · 상대 깊이)'
+  } else if (A['fake-depth']) { const n = 64, d = new Float32Array(n * n); for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) d[y * n + x] = y / (n - 1); disp = { d, w: n, h: n }; how = '시험 전용 가짜 깊이 (아래가 가까움) — 실제 컷에 쓰지 않아요' }
+  else throw new Error('깊이 모델(--depth)이 필요해요: ' + s.id)
+  const g8 = Buffer.alloc(disp.w * disp.h); for (let i = 0; i < g8.length; i++) g8[i] = Math.round(disp.d[i] * 255)
+  const dpng = await sh(g8, { raw: { width: disp.w, height: disp.h, channels: 1 } }).resize(SW / 2, SH / 2, { fit: 'fill', kernel: 'cubic' }).png({ compressionLevel: 9 }).toBuffer()
+  const cwebp = await sh(Buffer.from(rgb), { raw: { width: SW, height: SH, channels: 3 } }).webp({ quality: +(A.q || 84), effort: 6 }).toBuffer()
+  const dir = join(OUT, s.id); await mkdir(dir, { recursive: true }); await writeFile(join(dir, 'c.webp'), cwebp); await writeFile(join(dir, 'd.png'), dpng)
+  const man = { format: 'djs-shot/1', id: s.id, name: s.name, kind: 'shot', sub: s.sub, theme: s.sub, label: s.synthetic ? '합성 시험 컷 · 실사 아님' : '실제 사진 · 깊이는 AI 추정', ...(s.desc ? { desc: s.desc, stats: s.stats } : {}), size: [SW, SH], color: 'c.webp', disp: 'd.png', sources: [{ title: s.title, author: s.author, license: lic.L, source: s.source, text: attribution(s) }], privacy: { faces: fb.length, plates: plates.length }, review: !A.face && !s.synthetic, files: { 'c.webp': sha(cwebp), 'd.png': sha(dpng) } }
+  await writeFile(join(dir, 'manifest.json'), JSON.stringify(man, null, 1)); const rep = { id: s.id, kind: 'shot', sub: s.sub, depth: how, privacy: man.privacy, size: man.size, ms: Date.now() - t0 }; log(s.id, JSON.stringify(rep))
+  return { man, rep }
+}
+export { buildShot }
 export { build, THEMES, loadRGB, img, sha }
 const MAIN = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href /* 다른 스크립트(scene-mass)가 불러 쓸 때는 아래를 돌리지 않아요 */
 if (MAIN) await (async () => {

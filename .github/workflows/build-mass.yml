@@ -1,5 +1,6 @@
 # 대량 장면 공장 (v1.0-D): Actions 탭 → build-mass → Run workflow (사람이 시작해요)
 #  후보 5000곳 이상(Poly Haven · ambientCG · 위키미디어 공용 · Panoramax · Mapillary) → 라이선스 검사 → 품질 관문 → 분위기 칸 채우기로 선별
+#  + 인서트 컷(보통 가로 사진: Openverse · 위키미디어 CC — 멋진 차 · 사람들의 일상 · 분위기 순간)을 몫(shots)만큼 · 얼굴 · 번호판 흐림, 가까운 인물 사진은 빼요
 #  → 20개 작업이 나눠 만들기(깊이 · 지면 캘리브레이션 · LDI) → 합치기. 두 번째부터는 "이어서 모으기": 이미 있는 장면은 두고, 지난번 빈 칸 검색어로 더 모아요.
 #  저장소: 비밀값 HF_TOKEN + 입력 hf_repo(예: 사용자/djs-scenes) 가 있으면 Hugging Face 데이터셋, 없으면 이 저장소의 가지(scenes-<회차>-<조각>).
 #  목록(index.json) · 빈 칸 보고서(gaps.json) · 하늘 도서관은 언제나 scenes 가지에도 둬요 (앱이 jsDelivr · GitHub 에서 받아요).
@@ -12,6 +13,7 @@ on:
       hf_repo: { description: 'Hugging Face 데이터셋 (사용자/이름). 비우면 GitHub 가지에 저장', default: '' }
       resume: { description: '이어서 모으기 (scenes 가지의 기존 목록 · 빈 칸 검색어 사용)', default: 'true' }
       size: { description: '등장방형 가로 화소', default: '2048' }
+      shots: { description: '인서트 컷 수 (멋진 차 · 사람들의 일상 · 분위기 순간 사진 · 0 이면 안 모아요)', default: '200' }
 permissions:
   contents: write
 concurrency:
@@ -44,9 +46,9 @@ jobs:
           MAPILLARY_TOKEN: ${{ secrets.MAPILLARY_TOKEN }}
         run: |
           EX=""; GP=""; if [ -f prev/index.json ]; then EX="--existing prev/index.json"; GP="--gaps prev/gaps.json"; fi
-          node scripts/scene-mass.mjs --stage catalog --target "${{ github.event.inputs.target }}" $GP
+          node scripts/scene-mass.mjs --stage catalog --target "${{ github.event.inputs.target }}" --shots "${{ github.event.inputs.shots || '200' }}" $GP
           node scripts/scene-mass.mjs --stage gate --clip --conc 8
-          node scripts/scene-mass.mjs --stage curate --total "${{ github.event.inputs.total }}" $EX
+          node scripts/scene-mass.mjs --stage curate --total "${{ github.event.inputs.total }}" --shots "${{ github.event.inputs.shots || '200' }}" $EX
           node scripts/scene-mass.mjs --stage skies --out out/skies
           cat work/gaps.json | head -c 3000
       - uses: actions/upload-artifact@v4
