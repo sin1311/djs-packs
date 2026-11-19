@@ -71,14 +71,14 @@ export function plateKeep(cands, r, W, H, { h = 1.6, maxR = 8, lo = 0.15, hi = 1
   out.sort((a, b) => (b.score || 0) - (a.score || 0)); return out.slice(0, maxN)
 }
 /* ---- 사생활 2판 (2026-11-19: "모자이크가 너무 많아 그림을 알아보기 힘들어요") ----
-   · 얼굴: 누구인지 알아보는 정보는 얼굴 폭당 대략 8~16 주기의 공간 주파수에 있어요. 가우스 σ = 얼굴 폭/6 이면
-     반값 차단 주파수가 얼굴 폭당 1 주기 아래로 내려가 신원 정보는 사라지고, 얼굴 모양에 딱 맞는 타원만 바뀌어요
+   · 얼굴: 누구인지 알아보는 정보는 얼굴 폭당 대략 8~16 주기의 공간 주파수에 있어요. 가우스 σ = 얼굴 폭/8 이면
+     대비 10% 경계가 얼굴 폭당 약 2.7 주기로 내려가 신원 정보는 사라지고, 얼굴 모양에 딱 맞는 타원만 바뀌어요
      (예전: 상자 1.4배 + 여백 25% + 블록 평균 + 가우스 두 번 → 주변까지 크게 뭉갰어요).
      흐린 뒤 작은 잡음(±2.5)을 더해 역합성곱(되살리기) 공격을 막아요 — 블록 모자이크는 오히려 되살리기에 약해요.
    · 번호판: 흐리는 대신 "빈 판"으로 — 상자 바로 바깥 테두리 화소로 쿤스 패치(초한 보간)를 채워요
      P(s,t) = (1−t)·위(s) + t·아래(s) + (1−s)·왼(t) + s·오른(t) − 네 귀퉁이 쌍선형. 글자 정보는 0, 조명 기울기는 그대로. */
 const hashN = (x, y) => { let h = (x * 374761393 + y * 668265263) | 0; h = (h ^ (h >>> 13)) * 1274126177; return (((h ^ (h >>> 16)) >>> 0) / 4294967296 - 0.5) * 5 }
-export function anonBlur(rgb, W, H, boxes, { ch = 3, wrap = true, div = 6, noise = true } = {}) {
+export function anonBlur(rgb, W, H, boxes, { ch = 3, wrap = true, div = 8, noise = true } = {}) { /* div 8 (2026-11-19 사용자 결정: 6 → 8, 25% 완화). 10% 대비 경계 0.34·w/σ = 얼굴 폭당 약 2.7 주기 — 알아보려면 4~8 주기가 필요해요. 안전한 최대는 10 (3.4 주기) */
   const out = rgb.slice(), X = (x) => (wrap ? ((x % W) + W) % W : Math.max(0, Math.min(W - 1, x)))
   for (const b of boxes) {
     const sig = Math.max(1, Math.min(b.w, b.h) / div), pad = Math.ceil(sig * 3), x0 = Math.floor(b.x - pad), y0 = Math.max(0, Math.floor(b.y - pad)), x1 = Math.ceil(b.x + b.w + pad), y1 = Math.min(H, Math.ceil(b.y + b.h + pad)), bw = x1 - x0, bh = y1 - y0
