@@ -18,7 +18,7 @@ import { fitGroundPano, toMetric } from '../src/scene/factory/ground.js'
 import { buildLDI, parallaxBudget } from '../src/scene/factory/ldi.js'
 import { plateCandidates, plateKeep, yunetDecode, anonBlur, plateBlank, faceKeep, privacyLoad } from '../src/scene/factory/blur.js'
 import { analyzePano, levelRotation, rotateEquirect, rotateEquirectF, groundUp } from '../src/scene/factory/level.js'
-const LEVEL_G = { minInl: 0.3, minTilt: 0.4, maxApply: 15 } /* 깊이 수평의 믿음 규칙 — calib-level --depth 결과로 고쳐요 */
+const LEVEL_G = { on: false, minInl: 0.3, minTilt: 0.4, maxApply: 15 } /* 깊이 수평: 보정(실제 Poly Haven 150장)에서 반듯한 사진 오차 중앙 0.83° · 90% 3.1°, 5~12° 는 중앙 2.7° · 90% 8.4° → 안전 기준(적용 95% ≤ 1°)을 지키는 규칙이 없어 꺼 둬요. 두 방식 합의 규칙은 다음 보정에서 */
 import { faceTiles, closeFace, mergeBoxes, normDisp, shotPlates } from '../src/scene/factory/shotkit.js'
 import { checkLicense, attribution } from '../src/scene/license.js'
 import { faceDir, uvOf } from '../src/scene/geom.js'
@@ -123,7 +123,7 @@ async function build(s) {
   if (A.panda && !truth && !A['fake-depth']) { try { g = await pandaG(rgb); how = 'PanDA-Small (ONNX · CPU · 360° 한 번)'; const c0 = fitGroundPano(g, W, H, { h }); if (!c0 || c0.inl < 0.3) { const fd = await depthFaces(s, rgb, truth), g2 = mergeFaces(fd.faces, alignFaces(fd.faces, FN), W, H, FN), c2 = fitGroundPano(g2, W, H, { h }); if (c2 && (!c0 || c2.inl > c0.inl)) { g = g2; how = fd.how + ' (PanDA 지면 맞춤 ' + (c0 ? c0.inl.toFixed(2) : '없음') + ' → 6면)' } } } catch (e) { log('PanDA 실패 → 6면', s.id, String(e.message).slice(0, 80)); g = null } }
   if (!g) { const fd = await depthFaces(s, rgb, truth); g = mergeFaces(fd.faces, alignFaces(fd.faces, FN), W, H, FN); how = fd.how }
   if (s.kind !== 'synthetic') {
-    const gu = groundUp(g, W, H, { h }), okG = gu && gu.inl >= LEVEL_G.minInl && gu.tilt >= LEVEL_G.minTilt && gu.tilt <= LEVEL_G.maxApply
+    const gu = groundUp(g, W, H, { h }), okG = LEVEL_G.on && gu && gu.inl >= LEVEL_G.minInl && gu.tilt >= LEVEL_G.minTilt && gu.tilt <= LEVEL_G.maxApply
     let up = okG ? gu.up : null, how2 = okG ? 'ground' : ''
     if (!up) { const sm = W === 1024 ? rgb : new Uint8Array(await (await img())(Buffer.from(rgb), { raw: { width: W, height: H, channels: 3 } }).resize(1024, 512, { fit: 'fill' }).raw().toBuffer()), ed = analyzePano(sm, 1024, 512); if (ed.level) { up = ed.v; how2 = 'edges' } lev = { ...ed } }
     lev = { ...(lev || {}), tilt: up ? +((Math.acos(Math.min(1, up[1])) * 180) / Math.PI).toFixed(2) : gu ? +gu.tilt.toFixed(2) : 0, gTilt: gu ? +gu.tilt.toFixed(2) : null, gInl: gu ? +gu.inl.toFixed(3) : null, level: !!up, by: how2 }
