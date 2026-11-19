@@ -57,7 +57,7 @@ async function sources() {
     for (const p of picks) {
       const res = await fetch('https://api.polyhaven.com/info/' + p.id); if (!res.ok) { log('없는 HDRI (건너뜀):', p.id, res.status); continue }
       const info = await res.json(), T = THEMES[p.theme] /* Poly Haven 은 모든 자산이 CC0 */
-      out.push({ id: p.id, kind: 'reconstructed', name: `${T.name} · ${info.name || p.id}`, theme: p.theme, h: 1.6, mood: T.mood, car: !!T.car, license: 'CC0', author: Object.keys(info.authors || {}).join(', ') || 'Poly Haven', source: 'https://polyhaven.com/a/' + p.id, title: info.name || p.id, url: `https://dl.polyhaven.org/file/ph-assets/HDRIs/extra/Tonemapped%20JPG/${p.id}.jpg`, pick: p })
+      out.push({ id: p.id, kind: 'photo', name: `${T.name} · ${info.name || p.id}`, theme: p.theme, h: 1.6, mood: T.mood, car: !!T.car, license: 'CC0', author: Object.keys(info.authors || {}).join(', ') || 'Poly Haven', source: 'https://polyhaven.com/a/' + p.id, title: info.name || p.id, url: `https://dl.polyhaven.org/file/ph-assets/HDRIs/extra/Tonemapped%20JPG/${p.id}.jpg`, pick: p })
     }
     return out
   }
