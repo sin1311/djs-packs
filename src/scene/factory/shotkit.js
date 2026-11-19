@@ -20,7 +20,8 @@ export function normDisp(d) {
   const s = Float32Array.from(d).sort(), lo = s[Math.floor(s.length * 0.02)], hi = s[Math.floor(s.length * 0.98)], out = new Float32Array(d.length), r = hi - lo || 1
   for (let i = 0; i < d.length; i++) out[i] = Math.max(0, Math.min(1, (d[i] - lo) / r)); return out
 }
-// 차 사진의 번호판: 사진 아래쪽 85% 안 · 폭이 사진의 1.5~12% · 점수 순 3개까지 (원근 사진이라 거리 · 높이 대신 크기로)
-export function shotPlates(cands, W, H, { maxN = 3 } = {}) {
-  return cands.filter((b) => b.y + b.h / 2 > H * 0.15 && b.w >= W * 0.015 && b.w <= W * 0.12).sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, maxN)
+// 차 사진의 번호판: 사진 아래쪽 85% 안 · 폭이 사진의 1.5~12% · 점수 순 2개까지 (원근 사진이라 거리 · 높이 대신 크기로)
+export function shotPlates(cands, W, H, { maxN = 2, sub = 'car', minScore = 0.3 } = {}) { /* 4회차: 순간(네온 · 커피) 컷에도 무늬가 번호판으로 3곳씩 걸렸어요 → 차 · 거리 사람 컷만 · 점수 0.3 이상 · 2곳까지 (학습된 검출기 LPD-YuNet 은 라이선스 확인 뒤) */
+  if (sub === 'moment') return []
+  return cands.filter((b) => b.y + b.h / 2 > H * 0.15 && b.w >= W * 0.015 && b.w <= W * 0.12 && (b.score || 0) >= minScore).sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, maxN)
 }

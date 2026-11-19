@@ -12,7 +12,7 @@ const lum = (r, g, b) => 0.2126 * r + 0.7152 * g + 0.0722 * b
 // 경계 화소 → { n: Float32Array(3k), w: Float32Array(k) }. rgb 는 W×H 등장방형 (보통 1024×512)
 export function edgeNormals(rgb, W, H, { stride = 2, latMax = 55, minMag = 48 } = {}) {
   const g = new Float32Array(W * H); for (let i = 0; i < W * H; i++) g[i] = lum(rgb[i * 3], rgb[i * 3 + 1], rgb[i * 3 + 2])
-  const N = [], Wt = [], d = [0, 0, 0], a = [0, 0, 0], b = [0, 0, 0], c = [0, 0, 0], e = [0, 0, 0]
+  const N = [], Wt = [], AZ = [], d = [0, 0, 0], a = [0, 0, 0], b = [0, 0, 0], c = [0, 0, 0], e = [0, 0, 0]
   const y0 = Math.ceil(H * (0.5 - latMax / 180)), y1 = Math.floor(H * (0.5 + latMax / 180))
   for (let y = Math.max(1, y0); y < Math.min(H - 1, y1); y += stride) for (let x = 0; x < W; x += stride) {
     const xl = (x - 1 + W) % W, xr = (x + 1) % W, G = (xx, yy) => g[yy * W + xx]
@@ -22,9 +22,9 @@ export function edgeNormals(rgb, W, H, { stride = 2, latMax = 55, minMag = 48 } 
     const ex = [a[0] - b[0], a[1] - b[1], a[2] - b[2]], ey = [c[0] - e[0], c[1] - e[1], c[2] - e[2]], lx = Math.hypot(...ex), ly = Math.hypot(...ey)
     const tx = -gy / m, ty = gx / m /* 경계 접선 = 기울기에 수직 (화면 좌표) */, t = [0, 1, 2].map((k) => tx * ex[k] / lx + ty * ey[k] / ly)
     const n = [d[1] * t[2] - d[2] * t[1], d[2] * t[0] - d[0] * t[2], d[0] * t[1] - d[1] * t[0]], nl = Math.hypot(...n); if (nl < 1e-6) continue
-    N.push(n[0] / nl, n[1] / nl, n[2] / nl); Wt.push(m)
+    N.push(n[0] / nl, n[1] / nl, n[2] / nl); Wt.push(m); AZ.push(u)
   }
-  return { n: Float32Array.from(N), w: Float32Array.from(Wt) }
+  return { n: Float32Array.from(N), w: Float32Array.from(Wt), az: Float32Array.from(AZ) }
 }
 // 3×3 대칭 행렬의 고유분해 (야코비) → 가장 작은 고윳값의 고유벡터
 function smallestEig(S) {
@@ -54,6 +54,41 @@ export function upVector(E, { maxTilt = 20 } = {}) {
   }
   const tilt = Math.acos(Math.min(1, v[1])) * 180 / Math.PI, conf = tot > 0 ? inl / tot : 0
   return { v, tilt, conf, ok: conf >= 0.12 }
+}
+/* 2판 (4회차 실제 자료: 세로선 비율 중앙값 0.045 — 나뭇잎 · 바닥 무늬 같은 잡동사니 경계가 많아 반복 재가중이 처음 추정(곧장 위)에 끌려
+   10° 기운 사진을 1.4~6.7° 로 덜 쟀어요). 전역 탐색으로 바꿔요:
+   · RANSAC: 세로선 후보 둘의 법선 nᵢ × nⱼ 가 소실점 후보 v. 좁은 허용(|n·v| < 0.012)으로 무게 합(합의)을 재서 가장 큰 것 → 최소제곱으로 다듬기.
+     잡동사니는 방향이 고르게 퍼져 어느 v 에도 ε 비율만 맞지만, 진짜 세로선은 한 점에 몰려요.
+   · 믿음: 왼쪽 반구 · 오른쪽 반구 경계로 따로 찾은 v 가 1°(또는 기울기의 15%) 안에서 같고, 각 반구에 맞는 경계가 충분해야 바로잡아요. */
+function rnd(seed) { let a = seed >>> 0; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296 } }
+function ransacUp(E, sel, { iters = 700, tol = 0.012, maxTilt = 25, seed = 7 } = {}) {
+  const { n, w } = E, cand = sel.filter((i) => Math.abs(n[i * 3 + 1]) < Math.sin((maxTilt * Math.PI) / 180) + 0.02)
+  if (cand.length < 20) return null
+  const cw = []; let acc = 0; for (const i of cand) { acc += w[i]; cw.push(acc) }
+  const R = rnd(seed), draw = () => { const r = R() * acc; let lo = 0, hi = cw.length - 1; while (lo < hi) { const m = (lo + hi) >> 1; if (cw[m] < r) lo = m + 1; else hi = m } return cand[lo] }
+  const cons = (v, t) => { let s = 0, c = 0; for (const i of sel) if (Math.abs(n[i * 3] * v[0] + n[i * 3 + 1] * v[1] + n[i * 3 + 2] * v[2]) < t) { s += w[i]; c++ } return [s, c] }
+  let best = null, bs = -1, cosMax = Math.cos((maxTilt * Math.PI) / 180)
+  for (let k = 0; k < iters; k++) {
+    const a = draw(), b = draw(); if (a === b) continue
+    let v = [n[a * 3 + 1] * n[b * 3 + 2] - n[a * 3 + 2] * n[b * 3 + 1], n[a * 3 + 2] * n[b * 3] - n[a * 3] * n[b * 3 + 2], n[a * 3] * n[b * 3 + 1] - n[a * 3 + 1] * n[b * 3]]
+    const l = Math.hypot(...v); if (l < 0.05) continue; v = v.map((x) => x / l); if (v[1] < 0) v = v.map((x) => -x); if (v[1] < cosMax) continue
+    const [s] = cons(v, tol); if (s > bs) { bs = s; best = v }
+  }
+  if (!best) return null
+  /* 다듬기: 최소제곱은 허용 폭 안의 잡동사니에 끌려요 → 합의(맞는 무게)를 직접 최대로 하는 촘촘한 국소 탐색 (±1.6°, 0.1° 간격, 좁은 허용 0.008) */
+  { const e1 = [1, 0, 0], e2 = [0, 0, 1], rot = (v, a, b) => { const x = v[0] + a * e1[0] + b * e2[0], y = v[1] + a * e1[1] + b * e2[1], z = v[2] + a * e1[2] + b * e2[2], l = Math.hypot(x, y, z); return [x / l, y / l, z / l] }
+    for (const [span, stp] of [[0.028, 0.00175], [0.004, 0.0004]]) { let bb = best, bsc = cons(best, tol * 0.67)[0]; for (let a = -span; a <= span + 1e-9; a += stp) for (let b = -span; b <= span + 1e-9; b += stp) { const v = rot(best, a, b), sc = cons(v, tol * 0.67)[0]; if (sc > bsc) { bsc = sc; bb = v } } best = bb } }
+  for (const t of [tol * 0.67]) { const S = [[0, 0, 0], [0, 0, 0], [0, 0, 0]]; for (const i of sel) { const a = n[i * 3], b = n[i * 3 + 1], c = n[i * 3 + 2]; if (Math.abs(a * best[0] + b * best[1] + c * best[2]) > t) continue; const ww = w[i]; S[0][0] += ww * a * a; S[0][1] += ww * a * b; S[0][2] += ww * a * c; S[1][1] += ww * b * b; S[1][2] += ww * b * c; S[2][2] += ww * c * c } S[1][0] = S[0][1]; S[2][0] = S[0][2]; S[2][1] = S[1][2]; const e = smallestEig(S); best = e[1] < 0 ? e.map((x) => -x) : e }
+  const [s, c] = cons(best, tol); let tot = 0; for (const i of sel) tot += w[i]
+  return { v: best, inl: c, frac: s / tot, tilt: (Math.acos(Math.min(1, best[1])) * 180) / Math.PI }
+}
+export function upVector2(E, { minInl = 120, agree = 1.0 } = {}) {
+  const k = E.w.length, all = [], left = [], right = []; for (let i = 0; i < k; i++) { all.push(i); (E.az[i] < 0.5 ? left : right).push(i) }
+  const g = ransacUp(E, all), a = ransacUp(E, left, { seed: 11 }), b = ransacUp(E, right, { seed: 13 })
+  if (!g) return { v: [0, 1, 0], tilt: 0, conf: 0, ok: false, why: '경계가 적어요' }
+  const ang = a && b ? (Math.acos(Math.min(1, Math.abs(a.v[0] * b.v[0] + a.v[1] * b.v[1] + a.v[2] * b.v[2]))) * 180) / Math.PI : 99
+  const ok = !!(a && b) && a.inl >= minInl && b.inl >= minInl && ang <= Math.max(agree, 0.15 * g.tilt)
+  return { v: g.v, tilt: g.tilt, conf: g.frac, ok, halves: +ang.toFixed(2), inl: g.inl }
 }
 // 맨해튼 점수: 수평을 맞춘 뒤(위 = v) 세로가 아닌 경계들 중, 수평면의 직교 소실점 쌍 (h, h⊥) 의 큰 원에 맞는 무게 비율 (최댓값)
 export function manhattanScore(E, v = [0, 1, 0], { tol = 0.035, vert = 0.12 } = {}) {
@@ -92,6 +127,6 @@ export function rotateEquirect(src, W, H, R, ch = 3) {
 }
 // 한 번에: 판정 + (필요하면) 수평 맞추기. 1024×512 사본으로 재고, 원본 크기에 같은 회전을 적용해요
 export function analyzePano(rgb, W, H) {
-  const E = edgeNormals(rgb, W, H), up = upVector(E), man = up.ok ? manhattanScore(E, up.v) : { score: null, tot: 0 }
-  return { tilt: +up.tilt.toFixed(2), conf: +up.conf.toFixed(3), v: up.v.map((x) => +x.toFixed(5)), level: up.ok && up.tilt > 0.4, manh: man.score == null ? null : +man.score.toFixed(3), edges: E.w.length }
+  const E = edgeNormals(rgb, W, H), up = upVector2(E), man = up.ok ? manhattanScore(E, up.v) : { score: null, tot: 0 }
+  return { tilt: +up.tilt.toFixed(2), conf: +up.conf.toFixed(3), v: up.v.map((x) => +x.toFixed(5)), level: up.ok && up.tilt > 0.4, halves: up.halves, manh: man.score == null ? null : +man.score.toFixed(3), edges: E.w.length }
 }

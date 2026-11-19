@@ -152,7 +152,7 @@ async function buildShot(s) {
   } else log('경고: --face 모델이 없어 얼굴을 찾지 못했어요 → 이 컷은 사람 확인 목록에 올라가요')
   const fb = mergeBoxes(faces); if (closeFace(fb, SW, SH)) { log('컷 거절 (얼굴이 크게 나온 인물 사진)', s.id); return null }
   const pw = 1024, ph = Math.round(1024 * SH / SW), small = new Uint8Array(await sh(Buffer.from(rgb), { raw: { width: SW, height: SH, channels: 3 } }).resize(pw, ph, { fit: 'fill' }).raw().toBuffer()), k = SW / pw
-  const plates = s.blurred ? [] : shotPlates(plateCandidates(small, pw, ph).map((b) => ({ x: b.x * k, y: b.y * k, w: b.w * k, h: b.h * k, score: b.score })), SW, SH)
+  const plates = s.blurred ? [] : shotPlates(plateCandidates(small, pw, ph).map((b) => ({ x: b.x * k, y: b.y * k, w: b.w * k, h: b.h * k, score: b.score })), SW, SH, { sub: s.sub })
   const ld = fb.reduce((a, b) => a + b.w * b.h * Math.PI / 4, 0) / (SW * SH); if (ld > 0.03) { log('컷 거절 (흐릴 곳이 너무 많아요)', s.id, +ld.toFixed(4)); return null }
   rgb = plateBlank(anonBlur(rgb, SW, SH, fb, { wrap: false }), SW, SH, plates, { wrap: false }) /* 사생활 2판: 얼굴은 알맞게 흐리고 번호판은 빈 판으로 */
   let disp, how
