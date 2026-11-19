@@ -32,11 +32,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - name: 도구 (sharp · onnxruntime-node CPU)
         run: |
-          npm i --no-save sharp@0.33.5
-          npm i --no-save --ignore-scripts onnxruntime-node@1.20.1
+          npm init -y > /dev/null
+          ONNXRUNTIME_NODE_INSTALL_CUDA=skip npm i sharp@0.33.5 onnxruntime-node@1.20.1
+          node -e "require('sharp'); require('onnxruntime-node'); console.log('도구 확인: sharp · onnxruntime-node OK')"
       - name: 모델 받기 (Depth Anything V2 Small = Apache-2.0 · YuNet = MIT)
         run: |
           mkdir -p models
@@ -52,6 +53,7 @@ jobs:
           cat out/scenes/report.json | head -c 20000
           du -sh out/*
           REPO="https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
+          ls -d out/scenes-* > /dev/null 2>&1 || { echo "만든 장면이 없어요 — 위 로그의 실패 이유를 보세요"; exit 1; }
           for d in out/scenes-*; do b=$(basename "$d"); cp README.md "$d/README.md"; (cd "$d" && git init -q -b "$b" && git add -A && git commit -q -m "장면 팩 $b" && git push -f "$REPO" "$b"); done
           cp README.md out/scenes/README.md
           (cd out/scenes && git init -q -b scenes && git add -A && git commit -q -m "장면 목록" && git push -f "$REPO" scenes)

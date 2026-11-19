@@ -26,11 +26,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 20 }
+        with: { node-version: 22 }
       - name: 도구
         run: |
-          npm i --no-save sharp@0.33.5 @huggingface/transformers@3.1.2
-          npm i --no-save --ignore-scripts onnxruntime-node@1.20.1
+          npm init -y > /dev/null
+          ONNXRUNTIME_NODE_INSTALL_CUDA=skip npm i sharp@0.33.5 onnxruntime-node@1.20.1 @huggingface/transformers@3.1.2
+          node -e "require('sharp'); require('onnxruntime-node'); import('@huggingface/transformers').then(() => console.log('도구 확인: sharp · onnxruntime-node · transformers OK'))"
       - name: 이어서 모으기 자료 (있으면)
         if: ${{ github.event.inputs.resume == 'true' }}
         run: |
@@ -66,13 +67,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 20 }
+        with: { node-version: 22 }
       - uses: actions/download-artifact@v4
         with: { name: work, path: work/ }
       - name: 도구 · 모델 (Depth Anything V2 Small = Apache-2.0 · YuNet = MIT)
         run: |
-          npm i --no-save sharp@0.33.5
-          npm i --no-save --ignore-scripts onnxruntime-node@1.20.1
+          npm init -y > /dev/null
+          ONNXRUNTIME_NODE_INSTALL_CUDA=skip npm i sharp@0.33.5 onnxruntime-node@1.20.1
+          node -e "require('sharp'); require('onnxruntime-node'); console.log('도구 확인: sharp · onnxruntime-node OK')"
           mkdir -p models
           curl -fL -o models/dav2s.onnx https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/main/onnx/model.onnx
           curl -fL -o models/yunet.onnx https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx
@@ -100,7 +102,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 20 }
+        with: { node-version: 22 }
       - uses: actions/download-artifact@v4
         with: { pattern: 'part-*', path: out/, merge-multiple: true }
       - uses: actions/download-artifact@v4
