@@ -55,3 +55,17 @@ export function yunetDecode(out, S, { thr = 0.6 } = {}) {
   return keep
 }
 const iou = (a, b) => { const x = Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)), y = Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y)), i = x * y; return i / (a.w * a.h + b.w * b.h - i) }
+/* 번호판 후보 거르기 (깊이를 안 뒤): 번호판은 차에 붙어 지면에서 0.15~1.5 m 높이 · 8 m 안 · 폭 0.3~0.7 m 예요.
+   높이 = 눈높이 h + 거리 r·sin(고도각), 실제 폭 = r·(상자 폭 각도). 스튜디오 · 작업장의 무늬(높이 · 폭이 안 맞음)는 걸러져요.
+   그래도 한 장면에서 많이 남으면(> maxN) 무늬로 보고 점수 순 maxN 개만 흐려요 (실제 거리에서도 읽을 수 있는 번호판은 몇 개뿐) */
+export function plateKeep(cands, r, W, H, { h = 1.6, maxR = 8, lo = 0.15, hi = 1.5, wMin = 0.18, wMax = 0.9, maxN = 8 } = {}) {
+  const out = []
+  for (const b of cands) {
+    const cx = Math.round(((b.x + b.w / 2) % W + W) % W), cy = Math.max(0, Math.min(H - 1, Math.round(b.y + b.h / 2))), rr = r[cy * W + cx]
+    if (!Number.isFinite(rr) || rr >= maxR) continue
+    const el = (0.5 - (cy + 0.5) / H) * Math.PI, y = h + rr * Math.sin(el), wm = rr * Math.cos(el) * (b.w / W) * 2 * Math.PI
+    if (y < lo || y > hi || wm < wMin || wm > wMax) continue
+    out.push(b)
+  }
+  out.sort((a, b) => (b.score || 0) - (a.score || 0)); return out.slice(0, maxN)
+}

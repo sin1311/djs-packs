@@ -16,7 +16,7 @@ import { SYNTH, renderSynth } from '../src/scene/factory/synth.js'
 import { faceRGB, simDepthFaces, alignFaces, mergeFaces, FOV } from '../src/scene/factory/depth.js'
 import { fitGroundPano, toMetric } from '../src/scene/factory/ground.js'
 import { buildLDI } from '../src/scene/factory/ldi.js'
-import { blurBoxes, plateCandidates, yunetDecode } from '../src/scene/factory/blur.js'
+import { blurBoxes, plateCandidates, plateKeep, yunetDecode } from '../src/scene/factory/blur.js'
 import { checkLicense, attribution } from '../src/scene/license.js'
 import { faceDir, uvOf } from '../src/scene/geom.js'
 
@@ -72,8 +72,8 @@ async function loadRGB(s) {
 // 얼굴(YuNet) · 번호판(후보) 찾기 → 등장방형 상자. 합성 장면은 사람 · 번호판이 없어서 건너뛰어요(보고서에 그렇게 적어요)
 // 번호판: 읽을 수 있는 것만 흐려요 — 수평선 아래 35° ~ 위 5° (땅 근처) · 거리 8m 안 (2048 파노라마에서 그보다 먼 번호판은 몇 화소라 읽을 수 없어요).
 //  첫 실제 장면에서 휴리스틱 후보 159곳을 다 흐렸더니 창문 · 유리 격자가 번졌어요 → 이렇게 걸러요
-function platePass(rgb, r, cands, { maxR = 8, lo = -35, hi = 5 } = {}) {
-  const keep = cands.filter((b) => { const cx = Math.round(((b.x + b.w / 2) % W + W) % W), cy = Math.max(0, Math.min(H - 1, Math.round(b.y + b.h / 2))), el = (0.5 - (cy + 0.5) / H) * 180, rr = r[cy * W + cx]; return el >= lo && el <= hi && Number.isFinite(rr) && rr < maxR && b.w < W * 0.03 })
+function platePass(rgb, r, cands, h) { /* 거리 · 높이 · 실제 폭으로 거른 번호판만 흐려요 (src/scene/factory/blur.js plateKeep) */
+  const keep = plateKeep(cands, r, W, H, { h })
   return { rgb: keep.length ? blurBoxes(rgb, W, H, keep) : rgb, n: keep.length }
 }
 async function privacy(s, rgb) {
@@ -84,7 +84,7 @@ async function privacy(s, rgb) {
     const ort = await import('onnxruntime-node'), sess = await ort.InferenceSession.create(A.face), S = 640
     for (let i = 0; i < 6; i++) { const f = faceRGB(rgb, W, H, i, S), t = new Float32Array(3 * S * S); for (let p = 0; p < S * S; p++) for (let c = 0; c < 3; c++) t[c * S * S + p] = f[p * 3 + (2 - c)] /* BGR */; const out = await sess.run({ [sess.inputNames[0]]: new ort.Tensor('float32', t, [1, 3, S, S]) }); for (const b of yunetDecode(out, S)) { boxes.push(toEq(i, { x: b.x - b.w * 0.2, y: b.y - b.h * 0.2, w: b.w * 1.4, h: b.h * 1.4 }, S)); faces++ } }
   } else if (s.kind !== 'synthetic') log('경고: --face 모델이 없어 얼굴을 찾지 못했어요 → 이 장면은 사람 확인 목록에 올라가요')
-  const N = 512, plates = []; if (!s.blurred) for (let i = 0; i < 6; i++) if (i !== 2) for (const b of plateCandidates(faceRGB(rgb, W, H, i, N), N, N)) plates.push(toEq(i, b, N))
+  const N = 512, plates = []; if (!s.blurred) for (let i = 0; i < 6; i++) if (i !== 2) for (const b of plateCandidates(faceRGB(rgb, W, H, i, N), N, N)) plates.push({ ...toEq(i, b, N), score: b.score })
   return { rgb: blurBoxes(rgb, W, H, boxes), faces, cands: plates, plates: 0, review: !A.face, note: '' } /* 번호판은 깊이를 안 뒤에 거리 · 높이로 걸러서 흐려요 (아래 platePass) */
 }
 // 깊이: 실제 모델(Depth Anything V2 Small) 또는 합성 장면의 정답 흉내
@@ -110,7 +110,7 @@ async function build(s) {
   let { rgb, truth, h } = await loadRGB(s); const pv = await privacy(s, rgb); rgb = pv.rgb
   const N = FN, { faces, how } = await depthFaces(s, rgb, truth), ab = alignFaces(faces, N), g = mergeFaces(faces, ab, W, H, N), cal = fitGroundPano(g, W, H, { h })
   if (!cal || cal.inl < 0.15) { log('지면을 찾지 못했어요', s.id, cal && +cal.inl.toFixed(3)); return null } /* 실제 AI 깊이는 합성보다 거칠어요: 0.15~0.3 은 "약한 지면"으로 살리고 앱에서 이동 폭을 줄여요 */
-  const r = toMetric(g, cal), pp = platePass(rgb, r, pv.cands || []); rgb = pp.rgb; pv.plates = pp.n; if (pv.cands) pv.note = `번호판 후보 ${pv.cands.length}곳 중 읽을 수 있는 거리 · 높이의 ${pp.n}곳만 흐렸어요`
+  const r = toMetric(g, cal), pp = platePass(rgb, r, pv.cands || [], h); rgb = pp.rgb; pv.plates = pp.n; if (pv.cands) pv.note = `번호판 후보 ${pv.cands.length}곳 중 읽을 수 있는 거리 · 높이의 ${pp.n}곳만 흐렸어요`
   const rep = { id: s.id, depth: how, ground: { inliers: +cal.inl.toFixed(3), S: +cal.S.toFixed(5), T: +cal.T.toFixed(5), h }, privacy: { faces: pv.faces, plates: pv.plates, review: !!pv.review, note: pv.note } }
   if (truth) { const e = []; for (let i = 0; i < r.length; i += 7) if (Number.isFinite(truth[i]) && truth[i] < 60) e.push(Math.abs(r[i] / truth[i] - 1)); e.sort((x, y) => x - y); rep.calErr = { median: +e[e.length >> 1].toFixed(4), p90: +e[(e.length * 0.9) | 0].toFixed(4) } }
   const L = buildLDI(rgb, r, W, H, { layers: +(A.layers || 3) }), dir = join(OUT, s.id); await mkdir(dir, { recursive: true }); const files = {}, layers = []
