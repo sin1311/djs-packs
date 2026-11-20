@@ -1,0 +1,10 @@
+{
+ "htdemucs-f16.onnx": {
+  "mb": 82.7,
+  "sha256": "a32555cf72339e8095fc47e231d70ea3c0d7253442e3c33c52690c6733355ea1"
+ },
+ "htdemucs.onnx": {
+  "mb": 2.47,
+  "sha256": "4e0f74b7de486f9f9cbf4f7a9682dc8c6ad43f87d41fe1dcddd5401f7d350687"
+ }
+}
