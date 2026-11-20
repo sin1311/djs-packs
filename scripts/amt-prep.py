@@ -38,7 +38,6 @@ q = f'{OUT}/amt-small-q.onnx'
 VARIANTS = {'pc-all': dict(per_channel=True, op_types_to_quantize=['MatMul', 'Gemm', 'Gather']), 'pt-all': dict(per_channel=False, op_types_to_quantize=['MatMul', 'Gemm', 'Gather']), 'pc-mm': dict(per_channel=True, op_types_to_quantize=['MatMul', 'Gemm'])}
 for k, kw in VARIANTS.items():
     quantize_dynamic(fp, f'onnx/v-{k}.onnx', weight_type=QuantType.QInt8, **kw); print('판', k, os.path.getsize(f'onnx/v-{k}.onnx') // 1048576, 'MB', flush=True)
-print('int8', os.path.getsize(q) // 1048576, 'MB')
 import onnxruntime as ort
 s = ort.InferenceSession(f'onnx/v-pc-all.onnx'); print('입력', [i.name for i in s.get_inputs()][:6], '…', len(s.get_inputs()), '· 출력', [o.name for o in s.get_outputs()][:3])
 # ---- 기준 토큰 열: C 장조 멜로디(피아노 0) + 베이스(33) 8초, anticipation 형식 ----
