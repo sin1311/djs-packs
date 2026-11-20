@@ -35,10 +35,12 @@ with torch.no_grad():
 print('fp32', os.path.getsize(fp) // 1048576, 'MB (외부 파일 제외)')
 from onnxruntime.quantization import quantize_dynamic, QuantType
 q = f'{OUT}/amt-small-q.onnx'
-quantize_dynamic(fp, q, weight_type=QuantType.QInt8, op_types_to_quantize=['MatMul', 'Gemm', 'Gather'])
+VARIANTS = {'pc-all': dict(per_channel=True, op_types_to_quantize=['MatMul', 'Gemm', 'Gather']), 'pt-all': dict(per_channel=False, op_types_to_quantize=['MatMul', 'Gemm', 'Gather']), 'pc-mm': dict(per_channel=True, op_types_to_quantize=['MatMul', 'Gemm'])}
+for k, kw in VARIANTS.items():
+    quantize_dynamic(fp, f'onnx/v-{k}.onnx', weight_type=QuantType.QInt8, **kw); print('판', k, os.path.getsize(f'onnx/v-{k}.onnx') // 1048576, 'MB', flush=True)
 print('int8', os.path.getsize(q) // 1048576, 'MB')
 import onnxruntime as ort
-s = ort.InferenceSession(q); print('입력', [i.name for i in s.get_inputs()][:6], '…', len(s.get_inputs()), '· 출력', [o.name for o in s.get_outputs()][:3])
+s = ort.InferenceSession(f'onnx/v-pc-all.onnx'); print('입력', [i.name for i in s.get_inputs()][:6], '…', len(s.get_inputs()), '· 출력', [o.name for o in s.get_outputs()][:3])
 # ---- 기준 토큰 열: C 장조 멜로디(피아노 0) + 베이스(33) 8초, anticipation 형식 ----
 sys.path.insert(0, os.path.abspath('anticipation'))
 from anticipation import ops
@@ -59,11 +61,21 @@ nl, nh, hd = NL, NH, HD
 for n in names:
     if n.startswith('past_key_values'): feeds[n] = np.zeros((1, nh, 0, hd), dtype=np.float32)
 if 'use_cache_branch' in names: feeds['use_cache_branch'] = np.array([False])
+def judge(path):
+    ss = ort.InferenceSession(path); lo_ = ss.run(['logits'], feeds)[0][0]
+    def lsm(a): a = a - a.max(-1, keepdims=True); return a - np.log(np.exp(a).sum(-1, keepdims=True))
+    pt, po = lsm(lt), lsm(lo_); kl = float(np.mean(np.sum(np.exp(pt) * (pt - po), -1)))
+    t5 = float(np.mean([len(set(np.argsort(-lt[i])[:5]) & set(np.argsort(-lo_[i])[:5])) / 5 for i in range(len(lt))]))
+    return lo_, {'agree': float(np.mean(np.argmax(lo_, -1) == np.argmax(lt, -1))), 'kl': kl, 'top5': t5, 'mb': os.path.getsize(path) / 1048576}
+scores = {}
+for k in VARIANTS: scores[k] = judge(f'onnx/v-{k}.onnx')[1]; print('판', k, {a: round(b, 4) for a, b in scores[k].items()}, flush=True)
+ok_ = [k for k in VARIANTS if scores[k]['mb'] < 240] or list(VARIANTS); pick = min(ok_, key=lambda k: scores[k]['kl']); print('고른 판', pick)
+import shutil; shutil.copy(f'onnx/v-{pick}.onnx', q); s = ort.InferenceSession(q)
 lo = s.run(['logits'], feeds)[0][0]
 agree = float(np.mean(np.argmax(lo, -1) == np.argmax(lt, -1))); last_t = lt[-1]; last_o = lo[-1]
 top = lambda v: [[int(i), round(float(v[i]), 3)] for i in np.argsort(-v)[:10]]
 print('위치별 1위 일치율 (int8 vs fp32)', round(agree, 4), '· 마지막 상위 5', top(last_o)[:5], top(last_t)[:5])
-ref = {'model': MID, 'vocab': VOCAB_SIZE, 'layers': nl, 'heads': nh, 'head_dim': hd, 'tokens': toks, 'top_fp32': top(last_t), 'top_int8': top(last_o), 'agree': agree, 'inputs': names[:4]}
+ref = {'variants': scores, 'pick': pick, 'model': MID, 'vocab': VOCAB_SIZE, 'layers': nl, 'heads': nh, 'head_dim': hd, 'tokens': toks, 'top_fp32': top(last_t), 'top_int8': top(last_o), 'agree': agree, 'inputs': names[:4]}
 # 공식 generate (fp32, top_p 0.95) — 4~8초를 멜로디만 비워 채우기 (베이스 · 앞 멜로디는 조건)
 torch.manual_seed(0)
 inputs = ops.clip(ev, 0, 8, clip_duration=False)
