@@ -1,0 +1,26 @@
+# v1.2 ① AMT 준비 (사람/클로드가 시작): Anticipatory Music Transformer small → ONNX(KV 캐시) → int8 → 45MB 조각 · 기준값 → models 가지에 더해요
+name: amt-prep
+on: { workflow_dispatch: {} }
+permissions:
+  contents: write
+jobs:
+  prep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - name: 도구
+        run: |
+          git clone --depth 1 https://github.com/jthickstun/anticipation anticipation
+          grep -i -m2 "license" anticipation/README.md
+          pip install -q torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -q "transformers==4.46.3" "optimum[exporters]==1.23.3" onnx onnxruntime==1.20.1 huggingface_hub tqdm mido
+      - name: 변환 · 기준값
+        run: python scripts/amt-prep.py
+      - name: models 가지에 더하기
+        run: |
+          git config --global user.name 'github-actions[bot]'; git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git clone -q --depth 1 -b models "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" mb
+          cp models/amt-* mb/ && cd mb && git add -A && git commit -q -m "AMT 준비물 (small int8 조각 · 기준값)" && for k in 1 2 3 4; do git push origin models && break; sleep $((k * 15)); git pull -q --rebase origin models; done
