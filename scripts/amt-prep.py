@@ -86,6 +86,8 @@ def judge(path):
     pt, po = lsm(lt), lsm(lo_); kl = float(np.mean(np.sum(np.exp(pt) * (pt - po), -1)))
     t5 = float(np.mean([len(set(np.argsort(-lt[i])[:5]) & set(np.argsort(-lo_[i])[:5])) / 5 for i in range(len(lt))]))
     return lo_, {'agree': float(np.mean(np.argmax(lo_, -1) == np.argmax(lt, -1))), 'kl': kl, 'top5': t5, 'mb': os.path.getsize(path) / 1048576}
+print('TORCH_TOP5', json.dumps({'tokens': toks, 'top5': [[int(x) for x in np.argsort(-lt[i])[:5]] for i in range(len(lt))]}), flush=True)  # 배포한 바이트를 JS 쪽에서 파이토치와 직접 비교하려고 (양자화 판 점수가 실행마다 달라져서)
+for k in VARIANTS: print('판 sha', k, hashlib.sha256(open(f'onnx/v-{k}.onnx', 'rb').read()).hexdigest()[:16], flush=True)
 scores = {}
 for k in VARIANTS: scores[k] = judge(f'onnx/v-{k}.onnx')[1]; print('판', k, {a: round(b, 4) for a, b in scores[k].items()}, flush=True)
 ok_ = [k for k in VARIANTS if scores[k]['mb'] < 240] or list(VARIANTS); pick = min(ok_, key=lambda k: scores[k]['kl']); print('고른 판', pick)
