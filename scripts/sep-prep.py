@@ -19,10 +19,14 @@ path = f'{OUT}/htdemucs.onnx'
 with torch.no_grad():
     yx, yxt = core(mix, spec)
     print('파이토치 출력', tuple(yx.shape), tuple(yxt.shape), flush=True)
-    try:
-        torch.onnx.export(core, (mix, spec), path, export_params=True, opset_version=17, do_constant_folding=True, input_names=['mix', 'spec'], output_names=['x', 'xt'], dynamo=False, verbose=False)
-    except Exception as e:
-        m = str(e); print('ONNX 변환 실패:', type(e).__name__, '\n앞:', m[:1500], '\n...\n끝:', m[-1500:], flush=True); sys.exit(1)
+    ok = False
+    for dyn in (False, True):
+        try:
+            torch.onnx.export(core, (mix, spec), path, export_params=True, opset_version=17 if not dyn else 18, do_constant_folding=True, input_names=['mix', 'spec'], output_names=['x', 'xt'], dynamo=dyn, verbose=False)
+            ok = True; print('변환 방식', 'dynamo' if dyn else 'TorchScript', flush=True); break
+        except Exception as e:
+            m = str(e); print('ONNX 변환 실패 (dynamo=%s):' % dyn, type(e).__name__, '\n', m[:2500].split('graph(')[0][:2500], flush=True)
+    if not ok: sys.exit(1)
 import onnxruntime as ort
 s = ort.InferenceSession(path); ox, oxt = s.run(None, {'mix': mix.numpy(), 'spec': spec.numpy()})
 print('ONNX', os.path.getsize(path) // 1048576, 'MB · 최대 오차', float(np.abs(ox - yx.numpy()).max()), float(np.abs(oxt - yxt.numpy()).max()))
