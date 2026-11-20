@@ -1,0 +1,27 @@
+{
+ "file": "amt-small-q.onnx",
+ "mb": 163.42,
+ "sha256": "0a935bf593f008de459dd036f872c386ce54ac6b1cde54601f112c4b5ce376be",
+ "parts": [
+  {
+   "file": "amt-small-q.part0",
+   "sha256": "ebb5a3121b8f2ac63cf16a04e17a06a1273b4f5978e5f8d1be635e8e2b4c21a1",
+   "bytes": 47185920
+  },
+  {
+   "file": "amt-small-q.part1",
+   "sha256": "e534a451ab4a1bf5779bb017bd16d02843ac9928e77768853639e8b551f4e788",
+   "bytes": 47185920
+  },
+  {
+   "file": "amt-small-q.part2",
+   "sha256": "a5d4c075eb4136daa92e427b061a83436934b596ffbdfa2b56c019f69d48ab33",
+   "bytes": 47185920
+  },
+  {
+   "file": "amt-small-q.part3",
+   "sha256": "23c1afaf0dcfea8f8f19c0a3d572abaec6b982c83786c731dec5160f6ff61cdd",
+   "bytes": 29804789
+  }
+ ]
+}
