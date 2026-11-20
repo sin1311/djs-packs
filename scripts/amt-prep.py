@@ -11,10 +11,10 @@ try:
     rd = open(hf_hub_download(MID, 'README.md')).read(); print('README 앞:', rd[:600].replace('\n', ' | '))
 except Exception as e:
     print('모델 카드 확인 실패:', e)
-# optimum 없이 직접 내보내기 (GPT-2 · past_key_values 를 평평한 입출력으로, 길이 축 동적)
+# optimum 없이 직접 내보내기 (GPT-2 · past_key_values 를 평평한 입출력으로, 길이 축 동적) — eager 어텐션: sdpa 는 추적 때 is_causal · 마스크 분기가 굳어요
 from transformers import AutoModelForCausalLM
 from transformers.cache_utils import DynamicCache
-base = AutoModelForCausalLM.from_pretrained(MID).eval(); cfg = base.config; NL, NH, HD = cfg.n_layer, cfg.n_head, cfg.n_embd // cfg.n_head
+base = AutoModelForCausalLM.from_pretrained(MID, attn_implementation='eager').eval(); cfg = base.config; NL, NH, HD = cfg.n_layer, cfg.n_head, cfg.n_embd // cfg.n_head
 class Wrap(torch.nn.Module):
     def __init__(self, m): super().__init__(); self.m = m
     def forward(self, input_ids, attention_mask, position_ids, *past):
@@ -33,6 +33,20 @@ os.makedirs('onnx', exist_ok=True); fp = 'onnx/model.onnx'
 with torch.no_grad():
     torch.onnx.export(w, dummy, fp, opset_version=17, input_names=inames, output_names=onames, dynamic_axes=dyn, do_constant_folding=True, dynamo=False)
 print('fp32', os.path.getsize(fp) // 1048576, 'MB (외부 파일 제외)')
+import onnxruntime as ort
+def onnx_check(path, tag):
+    se = ort.InferenceSession(path); toks_ = list(range(100, 160)); full = base(torch.tensor([toks_])).logits[0].detach().numpy()
+    f = {'input_ids': np.array([toks_], dtype=np.int64), 'attention_mask': np.ones((1, 60), dtype=np.int64), 'position_ids': np.arange(60, dtype=np.int64)[None]}
+    for nm in inames[3:]: f[nm] = np.zeros((1, NH, 0, HD), dtype=np.float32)
+    o = se.run(None, f); d_full = float(np.abs(o[0][0] - full).max())
+    f2 = {'input_ids': np.array([toks_[:40]], dtype=np.int64), 'attention_mask': np.ones((1, 40), dtype=np.int64), 'position_ids': np.arange(40, dtype=np.int64)[None]}
+    for nm in inames[3:]: f2[nm] = np.zeros((1, NH, 0, HD), dtype=np.float32)
+    o2 = se.run(None, f2); f3 = {'input_ids': np.array([toks_[40:]], dtype=np.int64), 'attention_mask': np.ones((1, 60), dtype=np.int64), 'position_ids': np.arange(40, 60, dtype=np.int64)[None]}
+    for k, nm in enumerate(inames[3:]): f3[nm] = o2[1 + k]
+    o3 = se.run(None, f3); d_inc = float(np.abs(o3[0][0] - full[40:]).max())
+    print(tag, 'ONNX vs 파이토치 최대 차: 처음부터', round(d_full, 4), '· KV 캐시 이어서', round(d_inc, 4), '· 1위 일치', round(float(np.mean(np.argmax(o[0][0], -1) == np.argmax(full, -1))), 4), flush=True)
+    return d_full, d_inc
+with torch.no_grad(): onnx_check(fp, 'fp32')
 from onnxruntime.quantization import quantize_dynamic, QuantType
 q = f'{OUT}/amt-small-q.onnx'
 VARIANTS = {'pc-all': dict(per_channel=True, op_types_to_quantize=['MatMul', 'Gemm', 'Gather']), 'pt-all': dict(per_channel=False, op_types_to_quantize=['MatMul', 'Gemm', 'Gather']), 'pc-mm': dict(per_channel=True, op_types_to_quantize=['MatMul', 'Gemm'])}
