@@ -1,0 +1,36 @@
+# v1.1 ④-e 음원 분리 준비 (사람/클로드가 시작): HTDemucs (MIT) — demucs.onnx(MIT) 방식으로 ONNX 변환 · f16 판 · 합성 혼합음 기준값 → models 가지에 더해요
+#  ONNX 는 GitHub 파일 한도(100MB)를 넘을 수 있어 f16 판(약 84MB)을 거울에 올리고, fp32 는 아티팩트로만 남겨요.
+name: sep-prep
+on: { workflow_dispatch: {} }
+permissions:
+  contents: write
+jobs:
+  prep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - name: 도구
+        run: |
+          git clone --depth 1 https://github.com/sevagh/demucs.onnx demucs.onnx
+          head -3 demucs.onnx/LICENSE
+          pip install -q torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+          pip install -q einops julius openunmix dora-search diffq lameenc pyyaml tqdm soundfile onnx onnxscript onnxruntime onnxconverter-common
+      - name: 변환 · 기준값
+        run: python scripts/sep-prep.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sep-prep
+          if-no-files-found: ignore
+          path: |
+            models/htdemucs.onnx
+            models/sep-ref.json
+            models/sep-meta.json
+      - name: models 가지에 더하기 (f16 · 기준값 · 시험 혼합음)
+        run: |
+          git config --global user.name 'github-actions[bot]'; git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git clone -q --depth 1 -b models "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" mb
+          cp models/htdemucs-f16.onnx models/sep-ref.json models/sep-meta.json models/sep-mix.wav mb/ && cd mb && git add -A && git commit -q -m "음원 분리 준비물 (HTDemucs f16 · 기준값 · 합성 혼합음)" && for k in 1 2 3 4; do git push origin models && break; sleep $((k * 15)); git pull -q --rebase origin models; done
