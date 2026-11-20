@@ -22,7 +22,7 @@ class Wrap(torch.nn.Module):
         o = self.m(input_ids=input_ids, attention_mask=attention_mask, position_ids=position_ids, past_key_values=pkv, use_cache=True)
         pk = o.past_key_values.to_legacy_cache() if hasattr(o.past_key_values, 'to_legacy_cache') else o.past_key_values
         return (o.logits, *[t for kv in pk for t in kv])
-w = Wrap(base); P = 3; n = 5
+w = Wrap(base).eval(); P = 3; n = 5  # 새 nn.Module 은 기본이 학습 모드 — export 가 끝나며 "원래 모드"로 되돌릴 때 base 까지 학습 모드(dropout 켜짐)가 돼 기준 로짓이 매번 흔들렸어요
 dummy = (torch.randint(0, 100, (1, n)), torch.ones(1, P + n, dtype=torch.long), torch.arange(P, P + n)[None], *[torch.randn(1, NH, P, HD) for _ in range(2 * NL)])
 inames = ['input_ids', 'attention_mask', 'position_ids'] + [f'past_key_values.{i}.{k}' for i in range(NL) for k in ('key', 'value')]
 onames = ['logits'] + [f'present.{i}.{k}' for i in range(NL) for k in ('key', 'value')]
@@ -32,7 +32,7 @@ for nm in onames[1:]: dyn[nm] = {2: 'tot'}
 os.makedirs('onnx', exist_ok=True); fp = 'onnx/model.onnx'
 with torch.no_grad():
     torch.onnx.export(w, dummy, fp, opset_version=17, input_names=inames, output_names=onames, dynamic_axes=dyn, do_constant_folding=True, dynamo=False)
-print('fp32', os.path.getsize(fp) // 1048576, 'MB (외부 파일 제외)')
+base.eval(); print('fp32', os.path.getsize(fp) // 1048576, 'MB (외부 파일 제외)', '· 파이토치 학습 모드?', base.training)
 import onnxruntime as ort
 def onnx_check(path, tag, toks_):
     # 진짜 anticipation 토큰 열(앞 60개)로 비교해요 — 시간 토큰만 잇단 가짜 열(100~159)은 분포 밖이라 로짓이 수백까지 튀어 fp32 반올림만으로도 순위가 뒤집혀요
