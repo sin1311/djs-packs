@@ -1,6 +1,6 @@
 # v1.2 ① AMT 준비 (GitHub Actions 의 amt-prep 이 불러요)
 #  · Anticipatory Music Transformer small (stanford-crfm/music-small-800k · 코드 Apache-2.0 · 가중치 라이선스는 모델 카드에서 확인해 찍어요)
-#  · optimum 으로 ONNX(KV 캐시) → int8 동적 양자화 → 45MB 조각으로 (GitHub 파일 100MB · jsDelivr 50MB 한도)
+#  · torch.onnx 로 직접 ONNX(KV 캐시, 길이 축 동적) → int8 동적 양자화 → 45MB 조각으로 (GitHub 파일 100MB · jsDelivr 50MB 한도)
 #  · 기준값: 정해진 토큰 열의 마지막 로짓 상위 10 (파이토치 fp32 · ORT int8) · 위치별 1위 일치율 · 공식 generate 로 4초 채우기가 도는지
 import os, sys, json, hashlib, subprocess, numpy as np, torch
 OUT = os.path.abspath('models'); os.makedirs(OUT, exist_ok=True)
@@ -11,9 +11,28 @@ try:
     rd = open(hf_hub_download(MID, 'README.md')).read(); print('README 앞:', rd[:600].replace('\n', ' | '))
 except Exception as e:
     print('모델 카드 확인 실패:', e)
-subprocess.run(['optimum-cli', 'export', 'onnx', '--model', MID, '--task', 'text-generation-with-past', '--opset', '17', 'onnx'], check=True)
-src = [f for f in os.listdir('onnx') if f.endswith('.onnx')]; print('내보낸 파일', src)
-fp = 'onnx/model.onnx' if 'model.onnx' in src else 'onnx/decoder_model_merged.onnx'
+# optimum 없이 직접 내보내기 (GPT-2 · past_key_values 를 평평한 입출력으로, 길이 축 동적)
+from transformers import AutoModelForCausalLM
+from transformers.cache_utils import DynamicCache
+base = AutoModelForCausalLM.from_pretrained(MID).eval(); cfg = base.config; NL, NH, HD = cfg.n_layer, cfg.n_head, cfg.n_embd // cfg.n_head
+class Wrap(torch.nn.Module):
+    def __init__(self, m): super().__init__(); self.m = m
+    def forward(self, input_ids, attention_mask, position_ids, *past):
+        pkv = DynamicCache.from_legacy_cache(tuple((past[2 * i], past[2 * i + 1]) for i in range(NL)))
+        o = self.m(input_ids=input_ids, attention_mask=attention_mask, position_ids=position_ids, past_key_values=pkv, use_cache=True)
+        pk = o.past_key_values.to_legacy_cache() if hasattr(o.past_key_values, 'to_legacy_cache') else o.past_key_values
+        return (o.logits, *[t for kv in pk for t in kv])
+w = Wrap(base); P = 3; n = 5
+dummy = (torch.randint(0, 100, (1, n)), torch.ones(1, P + n, dtype=torch.long), torch.arange(P, P + n)[None], *[torch.randn(1, NH, P, HD) for _ in range(2 * NL)])
+inames = ['input_ids', 'attention_mask', 'position_ids'] + [f'past_key_values.{i}.{k}' for i in range(NL) for k in ('key', 'value')]
+onames = ['logits'] + [f'present.{i}.{k}' for i in range(NL) for k in ('key', 'value')]
+dyn = {'input_ids': {1: 'seq'}, 'attention_mask': {1: 'tot'}, 'position_ids': {1: 'seq'}, 'logits': {1: 'seq'}}
+for nm in inames[3:]: dyn[nm] = {2: 'past'}
+for nm in onames[1:]: dyn[nm] = {2: 'tot'}
+os.makedirs('onnx', exist_ok=True); fp = 'onnx/model.onnx'
+with torch.no_grad():
+    torch.onnx.export(w, dummy, fp, opset_version=17, input_names=inames, output_names=onames, dynamic_axes=dyn, do_constant_folding=True, dynamo=False)
+print('fp32', os.path.getsize(fp) // 1048576, 'MB (외부 파일 제외)')
 from onnxruntime.quantization import quantize_dynamic, QuantType
 q = f'{OUT}/amt-small-q.onnx'
 quantize_dynamic(fp, q, weight_type=QuantType.QInt8, op_types_to_quantize=['MatMul', 'Gemm', 'Gather'])
@@ -31,13 +50,12 @@ for i, p in enumerate([60, 62, 64, 65, 67, 65, 64, 62, 60, 64, 67, 72, 67, 64, 6
 for i, p in enumerate([36, 41, 43, 36]):
     t = i * 200; ev += [TIME_OFFSET + t, DUR_OFFSET + 190, NOTE_OFFSET + 33 * 128 + p]
 ev = ops.sort(ev); toks = [AUTOREGRESS] + ops.pad(ev)
-from transformers import AutoModelForCausalLM
-m = AutoModelForCausalLM.from_pretrained(MID).eval()
+m = base
 with torch.no_grad(): lt = m(torch.tensor([toks])).logits[0].numpy()
 names = [i.name for i in s.get_inputs()]; L = len(toks); feeds = {'input_ids': np.array([toks], dtype=np.int64)}
 if 'attention_mask' in names: feeds['attention_mask'] = np.ones((1, L), dtype=np.int64)
 if 'position_ids' in names: feeds['position_ids'] = np.arange(L, dtype=np.int64)[None]
-cfg = m.config; nl, nh, hd = cfg.n_layer, cfg.n_head, cfg.n_embd // cfg.n_head
+nl, nh, hd = NL, NH, HD
 for n in names:
     if n.startswith('past_key_values'): feeds[n] = np.zeros((1, nh, 0, hd), dtype=np.float32)
 if 'use_cache_branch' in names: feeds['use_cache_branch'] = np.array([False])

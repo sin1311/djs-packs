@@ -16,7 +16,7 @@ jobs:
           git clone --depth 1 https://github.com/jthickstun/anticipation anticipation
           grep -i -m2 "license" anticipation/README.md
           pip install -q torch --index-url https://download.pytorch.org/whl/cpu
-          pip install -q "transformers==4.46.3" "optimum[exporters]==1.23.3" onnx onnxruntime==1.20.1 huggingface_hub tqdm mido
+          pip install -q "transformers==4.46.3" onnx onnxruntime==1.20.1 huggingface_hub tqdm mido
           pip uninstall -y -q torchvision || true
       - name: 변환 · 기준값
         run: python scripts/amt-prep.py
