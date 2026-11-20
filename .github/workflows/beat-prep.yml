@@ -1,0 +1,27 @@
+# v1.1 ③ 박 · 음표 준비 (사람/클로드가 시작): Beat This! (MIT) ONNX 변환 · Basic Pitch (Apache-2.0) 거울 · 시험 기준값 → models 가지에 더해요 (CLAP 파일은 그대로)
+name: beat-prep
+on: { workflow_dispatch: {} }
+permissions:
+  contents: write
+jobs:
+  prep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - name: 도구
+        run: |
+          pip install -q torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+          pip install -q einops rotary-embedding-torch soxr onnx onnxscript onnxruntime soundfile
+          pip install -q "git+https://github.com/CPJKU/beat_this.git"
+          curl -fsSL https://raw.githubusercontent.com/CPJKU/beat_this/main/LICENSE | head -3
+          pip install -q "basic-pitch[onnx]" --no-deps && pip install -q librosa mir_eval pretty_midi resampy scipy || echo "basic-pitch 설치 일부 실패 (기준값만 건너뛰어요)"
+      - name: 변환 · 기준값
+        run: python scripts/beat-prep.py
+      - name: models 가지에 더하기
+        run: |
+          git config --global user.name 'github-actions[bot]'; git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git clone -q --depth 1 -b models "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" mb
+          cp models/* mb/ && cd mb && git add -A && git commit -q -m "박 · 음표 준비물 (Beat This! small0 · final0 · final0-q · Basic Pitch · 기준값)" && for k in 1 2 3 4; do git push origin models && break; sleep $((k * 15)); git pull -q --rebase origin models; done
