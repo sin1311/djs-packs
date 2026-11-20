@@ -34,8 +34,9 @@ with torch.no_grad():
     torch.onnx.export(w, dummy, fp, opset_version=17, input_names=inames, output_names=onames, dynamic_axes=dyn, do_constant_folding=True, dynamo=False)
 print('fp32', os.path.getsize(fp) // 1048576, 'MB (외부 파일 제외)')
 import onnxruntime as ort
-def onnx_check(path, tag):
-    se = ort.InferenceSession(path); toks_ = list(range(100, 160)); full = base(torch.tensor([toks_])).logits[0].detach().numpy()
+def onnx_check(path, tag, toks_):
+    # 진짜 anticipation 토큰 열(앞 60개)로 비교해요 — 시간 토큰만 잇단 가짜 열(100~159)은 분포 밖이라 로짓이 수백까지 튀어 fp32 반올림만으로도 순위가 뒤집혀요
+    toks_ = list(toks_[:60]); se = ort.InferenceSession(path); full = base(torch.tensor([toks_])).logits[0].detach().numpy()
     f = {'input_ids': np.array([toks_], dtype=np.int64), 'attention_mask': np.ones((1, 60), dtype=np.int64), 'position_ids': np.arange(60, dtype=np.int64)[None]}
     for nm in inames[3:]: f[nm] = np.zeros((1, NH, 0, HD), dtype=np.float32)
     o = se.run(None, f); d_full = float(np.abs(o[0][0] - full).max())
@@ -46,7 +47,6 @@ def onnx_check(path, tag):
     o3 = se.run(None, f3); d_inc = float(np.abs(o3[0][0] - full[40:]).max())
     print(tag, 'ONNX vs 파이토치 최대 차: 처음부터', round(d_full, 4), '· KV 캐시 이어서', round(d_inc, 4), '· 1위 일치', round(float(np.mean(np.argmax(o[0][0], -1) == np.argmax(full, -1))), 4), flush=True)
     return d_full, d_inc
-with torch.no_grad(): onnx_check(fp, 'fp32')
 from onnxruntime.quantization import quantize_dynamic, QuantType
 q = f'{OUT}/amt-small-q.onnx'
 VARIANTS = {'pc-all': dict(per_channel=True, op_types_to_quantize=['MatMul', 'Gemm', 'Gather']), 'pt-all': dict(per_channel=False, op_types_to_quantize=['MatMul', 'Gemm', 'Gather']), 'pc-mm': dict(per_channel=True, op_types_to_quantize=['MatMul', 'Gemm'])}
@@ -67,6 +67,7 @@ for i, p in enumerate([36, 41, 43, 36]):
 ev = ops.sort(ev); toks = [AUTOREGRESS] + ops.pad(ev)
 m = base
 with torch.no_grad(): lt = m(torch.tensor([toks])).logits[0].numpy()
+with torch.no_grad(): ref_fp32 = onnx_check(fp, 'fp32', toks); onnx_check(fp, 'fp32 (가짜 열 100~159)', list(range(100, 160)))
 names = [i.name for i in s.get_inputs()]; L = len(toks); feeds = {'input_ids': np.array([toks], dtype=np.int64)}
 if 'attention_mask' in names: feeds['attention_mask'] = np.ones((1, L), dtype=np.int64)
 if 'position_ids' in names: feeds['position_ids'] = np.arange(L, dtype=np.int64)[None]
@@ -88,7 +89,7 @@ lo = s.run(['logits'], feeds)[0][0]
 agree = float(np.mean(np.argmax(lo, -1) == np.argmax(lt, -1))); last_t = lt[-1]; last_o = lo[-1]
 top = lambda v: [[int(i), round(float(v[i]), 3)] for i in np.argsort(-v)[:10]]
 print('위치별 1위 일치율 (int8 vs fp32)', round(agree, 4), '· 마지막 상위 5', top(last_o)[:5], top(last_t)[:5])
-ref = {'variants': scores, 'pick': pick, 'model': MID, 'vocab': VOCAB_SIZE, 'layers': nl, 'heads': nh, 'head_dim': hd, 'tokens': toks, 'top_fp32': top(last_t), 'top_int8': top(last_o), 'agree': agree, 'inputs': names[:4]}
+ref = {'variants': scores, 'pick': pick, 'model': MID, 'vocab': VOCAB_SIZE, 'layers': nl, 'heads': nh, 'head_dim': hd, 'tokens': toks, 'top_fp32': top(last_t), 'top_int8': top(last_o), 'agree': agree, 'inputs': names[:4], 'fp32_onnx_vs_torch': {'full': ref_fp32[0], 'kv': ref_fp32[1]}}
 # 공식 generate (fp32, top_p 0.95) — 4~8초를 멜로디만 비워 채우기 (베이스 · 앞 멜로디는 조건)
 torch.manual_seed(0)
 inputs = ops.clip(ev, 0, 8, clip_duration=False)

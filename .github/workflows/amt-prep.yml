@@ -1,6 +1,9 @@
 # v1.2 ① AMT 준비 (사람/클로드가 시작): Anticipatory Music Transformer small → ONNX(KV 캐시) → int8 → 45MB 조각 · 기준값 → models 가지에 더해요
 name: amt-prep
-on: { workflow_dispatch: {} }
+on:
+  workflow_dispatch:
+    inputs:
+      publish: { description: 'models 가지에 더할지 (false = 확인만)', default: 'true' }
 permissions:
   contents: write
 jobs:
@@ -21,6 +24,7 @@ jobs:
       - name: 변환 · 기준값
         run: python scripts/amt-prep.py
       - name: models 가지에 더하기
+        if: ${{ inputs.publish != 'false' }}
         run: |
           git config --global user.name 'github-actions[bot]'; git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           git clone -q --depth 1 -b models "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" mb
