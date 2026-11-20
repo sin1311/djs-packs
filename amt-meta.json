@@ -1,27 +1,27 @@
 {
  "file": "amt-small-q.onnx",
- "mb": 164.08,
- "sha256": "7fccab4e30cd20c4c12cd3067d0be0975c11759a917b700048f28b9434c56a8a",
+ "mb": 165.17,
+ "sha256": "e79486ac72e1cb20067ddcee09d59a17a090678c0ca3f3aae8d96a4811bcd659",
  "parts": [
   {
    "file": "amt-small-q.part0",
-   "sha256": "bae4c37a497743db319aec07abb71fc84d2eb55c2abee10784cdc65d73bebe72",
+   "sha256": "c9544069efa567c630d21c6fb2ed7097b53587b0b701ee6dc57c20ba6c13a5d0",
    "bytes": 47185920
   },
   {
    "file": "amt-small-q.part1",
-   "sha256": "8515db845c2707bb5c08480fe34d8e2c08584fc2a5236d8c9e2611098ff62fe7",
+   "sha256": "9fbb81577ffb86e409ecae0958892192635a4ecc04600475a48add2461d3adfc",
    "bytes": 47185920
   },
   {
    "file": "amt-small-q.part2",
-   "sha256": "ed11ed1e5fee22a89c4778498a8af17883c68dfe0f68cfd62f3b4bf6c8d7a06c",
+   "sha256": "19c2db4c38df8b0b49b1f463190ba8aa15fb755d0bf9c483618e9035cb638b4b",
    "bytes": 47185920
   },
   {
    "file": "amt-small-q.part3",
-   "sha256": "1ac280196e87f092df37d3bedf23f6c5c4467c46b40060b82fbd9e827cdf244e",
-   "bytes": 30494900
+   "sha256": "737c65f512d1c9632faa449b3ff07c5baa7f241da9d5799c89bbf014d1f1047e",
+   "bytes": 31634350
   }
  ]
 }
