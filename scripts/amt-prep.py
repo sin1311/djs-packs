@@ -46,6 +46,11 @@ def onnx_check(path, tag, toks_):
     for k, nm in enumerate(inames[3:]): f3[nm] = o2[1 + k]
     o3 = se.run(None, f3); d_inc = float(np.abs(o3[0][0] - full[40:]).max())
     print(tag, 'ONNX vs 파이토치 최대 차: 처음부터', round(d_full, 4), '· KV 캐시 이어서', round(d_inc, 4), '· 1위 일치', round(float(np.mean(np.argmax(o[0][0], -1) == np.argmax(full, -1))), 4), flush=True)
+    # 진단: 분포(KL) · 상위 5 · 최대차가 어디서(위치 · 토큰 · 값) — 학습 때 거의 안 나온 토큰(로짓 수천)의 반올림 차인지, 진짜 계산 차인지
+    def lsm(a): a = a - a.max(-1, keepdims=True); return a - np.log(np.exp(a).sum(-1, keepdims=True))
+    pt, po = lsm(full), lsm(o[0][0]); kl = np.sum(np.exp(pt) * (pt - po), -1); d = np.abs(o[0][0] - full); i, j = np.unravel_index(np.argmax(d), d.shape)
+    t5 = np.mean([len(set(np.argsort(-full[k])[:5]) & set(np.argsort(-o[0][0][k])[:5])) / 5 for k in range(len(full))])
+    print('   KL 평균', round(float(kl.mean()), 5), '최대', round(float(kl.max()), 5), '(위치', int(np.argmax(kl)), ') · 상위5', round(float(t5), 4), '· 최대차 위치', int(i), '토큰', int(j), '파이토치', round(float(full[i, j]), 2), 'ONNX', round(float(o[0][0][i, j]), 2), '· 로짓 범위', round(float(full.min()), 1), '~', round(float(full.max()), 1), '· 위치별 최대차', [round(float(x), 2) for x in d.max(-1)[:12]], flush=True)
     return d_full, d_inc
 from onnxruntime.quantization import quantize_dynamic, QuantType
 q = f'{OUT}/amt-small-q.onnx'
