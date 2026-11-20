@@ -1,0 +1,18 @@
+{
+ "basic-pitch-nmp.onnx": {
+  "mb": 0.22,
+  "sha256": "2c3c1d144bfa61ad236e92e169c13535c880469a12a047d4e73451f2c059a0ec"
+ },
+ "beat-this-final0-q.onnx": {
+  "mb": 21.11,
+  "sha256": "d7d2e7c985f42e6eb257bef6e6c6540b8ad6668addb048ddfdce1a8d366f29ec"
+ },
+ "beat-this-final0.onnx": {
+  "mb": 78.72,
+  "sha256": "b81fbe021ed330c33b4f199ee3a7f7fac95f4eb0d909e9f081dfb79bedba4ceb"
+ },
+ "beat-this-small0.onnx": {
+  "mb": 9.47,
+  "sha256": "7886582d138d6ceab0974b5b3418570bce39933169c240c938c20545438258a1"
+ }
+}
