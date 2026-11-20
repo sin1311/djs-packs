@@ -17,8 +17,12 @@ TL = int(core.segment * core.samplerate)
 mix = torch.randn(1, 2, TL); spec = standalone_magnitude(standalone_spec(mix))
 path = f'{OUT}/htdemucs.onnx'
 with torch.no_grad():
-    torch.onnx.export(core, (mix, spec), path, export_params=True, opset_version=17, do_constant_folding=True, input_names=['mix', 'spec'], output_names=['x', 'xt'], dynamo=False)
     yx, yxt = core(mix, spec)
+    print('파이토치 출력', tuple(yx.shape), tuple(yxt.shape), flush=True)
+    try:
+        torch.onnx.export(core, (mix, spec), path, export_params=True, opset_version=17, do_constant_folding=True, input_names=['mix', 'spec'], output_names=['x', 'xt'], dynamo=False, verbose=False)
+    except Exception as e:
+        m = str(e); print('ONNX 변환 실패:', type(e).__name__, '\n앞:', m[:1500], '\n...\n끝:', m[-1500:], flush=True); sys.exit(1)
 import onnxruntime as ort
 s = ort.InferenceSession(path); ox, oxt = s.run(None, {'mix': mix.numpy(), 'spec': spec.numpy()})
 print('ONNX', os.path.getsize(path) // 1048576, 'MB · 최대 오차', float(np.abs(ox - yx.numpy()).max()), float(np.abs(oxt - yxt.numpy()).max()))
