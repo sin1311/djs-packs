@@ -105,7 +105,7 @@ jobs:
         with: { name: picked, path: work/selected.json }
   build:
     needs: pick
-    if: ${{ github.event.inputs.stop_after_pick != 'true' && needs.pick.result == 'success' }}
+    if: ${{ always() && github.event.inputs.stop_after_pick != 'true' && needs.pick.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 300
     strategy:
