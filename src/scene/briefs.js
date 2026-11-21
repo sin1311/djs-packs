@@ -4,7 +4,9 @@
            잘 어울려도 불쾌감 · 이상한 느낌을 줄 사진은 넣지 말고, 멋짐 · 낭만 · 추억 같은 좋은 감정을 불러일으킬 사진만."
    - 장면 공장(Actions)이 CLIP(OpenAI CLIP ViT-B/32 · MIT, Xenova ONNX)으로 이 글들을 장면의 원근 4장과 비교해요 (scene-mass.mjs rescore · gate).
    - 앱은 결과(장면마다 g = 장르 적합도)만 읽어 장르에 맞는 장면을 골라요 (select.js).
-   - 순수 데이터 + 순수 함수 (DOM · 모델 없음). 시험: unit37. */
+   - 순수 데이터 + 순수 함수 (DOM · 모델 없음). 시험: unit37.
+   - 2026-11-21 둘째 지시: 가까이 찍은 사진 빼기 · 작품으로 남길 만한 사진만 → craft.js (미학 점수 · 전문/아마추어 · 넓은/가까이 · 화소 통계)를 판정에 더해요. */
+import { CRAFT_PROMPTS, isCraftKey, axis, aesScore, techVerdict, TECH_CUT } from './craft.js'
 
 /* 장르 브리프: want = 사람이 읽는 한 줄 · prompts = CLIP 비교 문장(영어) · terms = 360° 파노라마 검색어(위키미디어 · 파노라막스)
    shots = 인서트 컷(보통 사진) 검색어(Openverse) · places = 명소 이름(검색어에 덧붙여요) */
@@ -54,6 +56,24 @@ export const BRIEFS = {
     prompts: ['a glittering dance floor with a disco ball', 'a theater district at night with bright marquee lights', 'a retro street with colorful neon signs at night'],
     terms: ['theater district night', 'neon signs street', 'Broadway night', 'Las Vegas'], shots: ['disco ball lights', 'broadway marquee night', 'retro neon signs'], places: ['New York', 'Las Vegas', 'Paris'] },
 }
+/* 사진 검색어 더하기 (2026-11-21: 작품성 기준이 엄격해 2000~3000장을 채우려면 후보가 많이 필요해요) — 모두 "넓게 담은 장면" 쪽 (가까이 찍은 사진 빼기) */
+export const SHOTS_MORE = {
+  carol: ['christmas market square night', 'old town christmas illumination', 'snowy village christmas evening', 'christmas street decorations evening', 'advent market stalls lights', 'christmas tree plaza night', 'winter old town snow night', 'christmas lights city avenue', 'festive town square winter', 'christmas illuminated street europe'],
+  waltz: ['vienna ringstrasse evening', 'baroque palace gardens', 'historic european square twilight', 'danube riverside evening', 'grand old town architecture dusk', 'parisian boulevard evening', 'opera house night illuminated', 'historic bridge sunset europe', 'palace fountain evening', 'old town river reflection night'],
+  citypop: ['city skyline sunset', 'urban street golden hour', 'coastal road sunset drive', 'tokyo skyline dusk', 'los angeles sunset street', 'miami beach sunset skyline', 'neon street twilight', 'harbor city dusk lights', 'highway city lights evening', 'classic car street sunset'],
+  trap: ['city skyline night lights', 'downtown night street lights', 'skyscrapers night reflection', 'rooftop view city night', 'neon reflections wet street', 'urban night long exposure', 'city bridge night lights', 'night city aerial view', 'parking garage rooftop city night', 'times square night'],
+  boombap: ['new york street night', 'brooklyn brownstone street', 'manhattan avenue night', 'new york fire escapes', 'harlem street evening', 'nyc subway station', 'new york brick buildings street', 'queens street evening', 'new york rain night street', 'bronx street view'],
+  lofi: ['rainy street evening lights', 'quiet alley evening lanterns', 'cafe terrace evening', 'kyoto street evening', 'tokyo side street night', 'cozy street dusk', 'bookshop street evening', 'small town evening lights', 'canal houses evening', 'lantern lit street'],
+  house: ['beach sunset party lights', 'city nightlife street', 'rooftop terrace sunset city', 'ibiza sunset', 'marina night lights', 'promenade evening lights', 'festival stage lights night', 'pool party sunset', 'barcelona night street', 'colorful night city'],
+  techno: ['berlin night city', 'illuminated modern architecture night', 'light installation night', 'futuristic building night', 'tunnel lights', 'industrial architecture night lights', 'laser show night', 'city lights long exposure', 'modern bridge night lights', 'night skyline blue lights'],
+  dnb: ['light trails city night', 'hong kong skyline night', 'shinjuku night street', 'highway interchange night', 'night traffic long exposure', 'neon city night street', 'shanghai skyline night', 'rainy neon city', 'motion blur city night', 'futuristic skyline night'],
+  kpop: ['seoul skyline night', 'han river night', 'myeongdong street', 'gangnam night', 'seoul tower night', 'busan night skyline', 'colorful shopping street night', 'hongdae street', 'seoul street evening lights', 'dongdaemun night'],
+  ballad: ['lake sunset reflection', 'beach sunrise waves', 'autumn path trees', 'mountain lake morning', 'flower field sunset', 'misty lake dawn', 'seaside sunset calm', 'cherry blossom path', 'river sunset quiet', 'snowy forest path'],
+  rock: ['mountain road landscape', 'coastal cliffs sunset', 'open road desert highway sunset', 'scottish highlands road', 'iceland road landscape', 'concert crowd stage lights', 'route 66 road', 'dramatic mountain landscape', 'canyon road sunset', 'coastal highway cliffs'],
+  reggaeton: ['tropical beach sunset palms', 'colorful colonial street', 'havana street', 'caribbean beach', 'san juan old town', 'cartagena street colorful', 'palm beach promenade', 'tropical sunset sea', 'latin plaza evening', 'colorful houses street'],
+  disco: ['broadway theater lights', 'las vegas strip night', 'neon signs street night', 'retro neon city', 'theater marquee night', 'glittering city night', 'dance hall lights', 'paris night lights', 'vintage neon signs street', 'colorful lights night street'],
+}
+export const shotTerms = (g, places = 4) => { const b = BRIEFS[g]; if (!b) return []; return [...new Set([...b.shots, ...(SHOTS_MORE[g] || []), ...b.places.slice(0, places).map((pl) => `${b.shots[0].split(' ').slice(0, 2).join(' ')} ${pl}`)])] }
 export const GENRES = Object.keys(BRIEFS)
 
 /* 감성: 사람에게 멋짐 · 낭만 · 추억 같은 좋은 감정을 불러일으키는 사진 */
@@ -71,24 +91,30 @@ export const REJECT = [
   /* 1차 검토 시트(2026-11-21)에서 찾은 것: 렌즈에 맺힌 물방울 · 찍는 사람 뒤통수 · 아이 · 우주에서 본 지도 · 텅 빈 연회장 */
   ['렌즈 물방울', 'a blurry photo with water drops on the camera lens'], ['찍는 사람 머리', 'the back of a person head blocking the camera view'], ['어린이', 'a young child or little kids'], ['위성 지도', 'a satellite map of the earth from space'], ['빈 연회장', 'an empty banquet hall'],
 ]
-export const ALL_PROMPTS = () => { const out = []; for (const [g, b] of Object.entries(BRIEFS)) for (const p of b.prompts) out.push(['g:' + g, p]); for (const p of APPEAL) out.push(['appeal', p]); for (const p of PLAIN) out.push(['plain', p]); for (const [k, p] of REJECT) out.push(['rej:' + k, p]); return out }
+export const ALL_PROMPTS = () => { const out = []; for (const [g, b] of Object.entries(BRIEFS)) for (const p of b.prompts) out.push(['g:' + g, p]); for (const p of APPEAL) out.push(['appeal', p]); for (const p of PLAIN) out.push(['plain', p]); for (const [k, p] of REJECT) out.push(['rej:' + k, p]); out.push(...CRAFT_PROMPTS()); return out } /* 작품성 문장은 맨 뒤 — 감성 · 거절 · 장르 softmax 에는 안 들어가요 */
 
 /* 점수: v = 이미지 임베딩(정규화) · T = ALL_PROMPTS 순서의 문장 임베딩(정규화). CLIP 의 로짓 배율 100 으로 softmax.
    감성 = P(감성) / (P(감성) + P(평범))   · 거절 = 가장 강한 거절 개념의 확률(전체 softmax 안에서) · 장르 = 장르마다 자기 문장들 중 최댓값의 softmax(장르끼리) × 장르 쪽 총확률 */
-export function scoreScene(v, T, prompts = ALL_PROMPTS()) {
-  const lg = T.map((t) => { let s = 0; for (let k = 0; k < t.length; k++) s += t[k] * v[k]; return 100 * s }), mx = Math.max(...lg), ex = lg.map((x) => Math.exp(x - mx)), Z = ex.reduce((a, b) => a + b, 0), P = ex.map((x) => x / Z)
+export function scoreScene(v, T, prompts = ALL_PROMPTS(), tech = null) {
+  const lgAll = T.map((t) => { let s = 0; for (let k = 0; k < t.length; k++) s += t[k] * v[k]; return 100 * s }), keysAll = prompts.map((p) => p[0]), main = prompts.map((p, i) => [p, i]).filter(([p]) => !isCraftKey(p[0])), mainP = main.map(([p]) => p), lg = main.map(([, i]) => lgAll[i])
+  const craft = { pro: +axis(lgAll, keysAll, 'pro', 'am').toFixed(3), close: +axis(lgAll, keysAll, 'close', 'wide').toFixed(3), aes: aesScore(v), ...(tech ? { tech } : {}) } /* 전문 vs 아마추어 · 가까이 vs 넓게 · 미학 점수 */
+  prompts = mainP; const mx = Math.max(...lg), ex = lg.map((x) => Math.exp(x - mx)), Z = ex.reduce((a, b) => a + b, 0), P = ex.map((x) => x / Z)
   let pa = 0, pp = 0, pg = 0, rej = 0, rejK = ''; const gmax = {}
   prompts.forEach(([k], i) => { if (k === 'appeal') pa += P[i]; else if (k === 'plain') pp += P[i]; else if (k.startsWith('rej:')) { if (P[i] > rej) { rej = P[i]; rejK = k.slice(4) } } else { pg += P[i]; const g = k.slice(2); gmax[g] = Math.max(gmax[g] ?? -1e9, lg[i]) } })
   const gk = Object.keys(gmax), gm = Math.max(...gk.map((g) => gmax[g])), ge = gk.map((g) => Math.exp((gmax[g] - gm) / 2)), gz = ge.reduce((a, b) => a + b, 0) /* 장르끼리는 부드럽게(온도 2) — 한 장면이 여러 장르에 어울릴 수 있어요 */
   const fit = {}; gk.forEach((g, i) => { fit[g] = +(ge[i] / gz).toFixed(3) })
-  return { appeal: +(pa / Math.max(1e-9, pa + pp)).toFixed(3), plain: +pp.toFixed(3), rej: +rej.toFixed(3), rejK, genreMass: +pg.toFixed(3), fit, best: gk.reduce((a, g) => (fit[g] > (fit[a] ?? -1) ? g : a), gk[0]) }
+  return { appeal: +(pa / Math.max(1e-9, pa + pp)).toFixed(3), plain: +pp.toFixed(3), rej: +rej.toFixed(3), rejK, genreMass: +pg.toFixed(3), fit, best: gk.reduce((a, g) => (fit[g] > (fit[a] ?? -1) ? g : a), gk[0]), ...craft }
 }
 /* 판정 (기본값은 Actions 의 검토 시트로 확인해 고쳐요): 거절 개념이 강하면 빼고, 감성이 낮거나 장르 쪽 확률이 너무 낮으면(어느 노래에도 안 어울림) 빼요 */
-export const CUT = { rej: 0.12, appeal: 0.55, genreMass: 0.25 }
+export const CUT = { rej: 0.12, appeal: 0.55, genreMass: 0.25, close: 0.4, pro: 0.55, aes: 5.0, tech: TECH_CUT } /* close · pro · aes: 작품성 (검토 시트로 정해요 · 옛 채점처럼 값이 없으면 그 검사는 건너뛰어요) */
 export function verdict(sc, cut = CUT) {
   if (sc.rej >= cut.rej) return { ok: false, why: '불쾌 · 이상: ' + sc.rejK }
   if (sc.appeal < cut.appeal && !(cut.gmAlt != null && sc.genreMass >= cut.gmAlt)) return { ok: false, why: '평범 · 지루함' } /* gmAlt: 거리에서 찍은 사진이라 "평범" 쪽으로 기울어도 장르 분위기가 아주 강하면(밤 쇼핑 거리 · 네온) 살려요 */
   if (sc.genreMass < cut.genreMass) return { ok: false, why: '어느 장르 분위기와도 멀어요' }
+  if (sc.close != null && cut.close != null && sc.close > cut.close) return { ok: false, why: '가까이 찍었어요 (클로즈업)' }
+  if (sc.pro != null && cut.pro != null && sc.pro < cut.pro) return { ok: false, why: '작품성: 스냅 사진 같아요' }
+  if (sc.aes != null && cut.aes != null && sc.aes < cut.aes) return { ok: false, why: '작품성: 미학 점수가 낮아요' }
+  if (sc.tech) { const t = techVerdict(sc.tech, cut.tech || TECH_CUT); if (!t.ok) return { ok: false, why: '작품성 · ' + t.why } }
   return { ok: true, why: '' }
 }
 /* 장면 목록에 싣는 짧은 장르 적합도: 상위 3개만 [장르, 0–255] */

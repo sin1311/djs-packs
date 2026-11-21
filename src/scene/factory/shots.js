@@ -29,16 +29,18 @@ export async function openverse(fetch, { terms = SHOT_TERMS, pages = 1, minW = 1
   return out
 }
 // 위키미디어 공용: 검색어마다 보통(평면) 사진 · 가로 2400 이상 (화질이 좋아요)
-export async function wikimediaShots(fetch, { terms = SHOT_TERMS, per = 40, minW = 2400, wait } = {}) {
+/* variants: 같은 검색어를 여러 번 — '' 는 그냥, ' incategory:"Quality_images"' 는 위키미디어 공용 "우수 이미지"(사람이 기술 품질을 심사해 뽑은 사진) 안에서만.
+   pages: 그냥 검색은 쪽(50장)을 더 넘겨요 (2026-11-21: 2000~3000장 확보) */
+export async function wikimediaShots(fetch, { terms = SHOT_TERMS, per = 40, minW = 2400, wait, variants = [''], pages = 1 } = {}) {
   const out = [], seen = new Set(), strip = (h) => String(h || '').replace(/<[^>]+>/g, ' ').replace(/&[a-z]+;/g, ' ').replace(/\s+/g, ' ').trim()
-  for (const [sub, list] of Object.entries(terms)) for (const t of list) {
-    const q = new URLSearchParams({ action: 'query', format: 'json', generator: 'search', gsrsearch: `${t} filetype:bitmap -panorama -equirectangular`, gsrnamespace: '6', gsrlimit: String(Math.min(50, per)), prop: 'imageinfo', iiprop: 'url|size|mime|extmetadata', iiurlwidth: '1920', origin: '*' })
+  for (const [sub, list] of Object.entries(terms)) for (const t of list) for (const vr of variants) for (let pg = 0; pg < (vr ? 1 : pages); pg++) {
+    const q = new URLSearchParams({ action: 'query', format: 'json', generator: 'search', gsrsearch: `${t} filetype:bitmap -panorama -equirectangular${vr}`, gsrnamespace: '6', gsrlimit: String(Math.min(50, per)), gsroffset: String(pg * Math.min(50, per)), prop: 'imageinfo', iiprop: 'url|size|mime|extmetadata', iiurlwidth: '1920', origin: '*' })
     let j; try { j = await (await fetchRetry('https://commons.wikimedia.org/w/api.php?' + q, { fetch, tries: 3, ...(wait ? { wait } : {}) })).json() } catch (e) { console.log('[mass] wikimedia 컷', t, '건너뜀:', String(e.message).slice(0, 80)); continue }
     for (const p of Object.values((j.query || {}).pages || {})) {
       const ii = (p.imageinfo || [])[0]; if (!ii || seen.has(p.pageid)) continue; seen.add(p.pageid)
       if (!/jpeg|png/.test(ii.mime || '') || !isShotShape(ii.width, ii.height) || ii.width < minW) continue
       const m = ii.extmetadata || {}, v = (k) => strip((m[k] || {}).value)
-      out.push({ src: 'wikimedia', kind: 'shot', sub, id: 'wms-' + p.pageid, title: p.title.replace(/^File:/, '').replace(/\.\w+$/, '').slice(0, 80), author: v('Artist') || '', license: v('LicenseShortName') || v('License'), source: ii.descriptionurl, url: wmThumb(ii.thumburl || ii.url, 1920), thumb: wmThumb(ii.thumburl || ii.url, 1280), w: ii.width, h: ii.height, text: [t, p.title, v('ImageDescription')].join(' ').slice(0, 400) })
+      out.push({ src: 'wikimedia', kind: 'shot', sub, ...(vr ? { qi: true } : {}), id: 'wms-' + p.pageid, title: p.title.replace(/^File:/, '').replace(/\.\w+$/, '').slice(0, 80), author: v('Artist') || '', license: v('LicenseShortName') || v('License'), source: ii.descriptionurl, url: wmThumb(ii.thumburl || ii.url, 1920), thumb: wmThumb(ii.thumburl || ii.url, 1280), w: ii.width, h: ii.height, text: [t, p.title, v('ImageDescription')].join(' ').slice(0, 400) })
     }
   }
   return out

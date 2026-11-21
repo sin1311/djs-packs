@@ -81,23 +81,47 @@ async function gateStage() {
 /* 장르 브리프 컷 (2026-11-21 사용자: "노래에 맞는 도시에 가거나 활동을 한다고 생각해 봐"): 360° 가 아닌 보통 사진을 장르마다 브리프 검색어(+ 명소)로 모아
    → 품질 관문(gate) → CLIP 브리프 채점(brief-score: 감성 · 불쾌 거절 · 그 장르가 상위 3 안) → 장르마다 상위 --per 장(curate --briefs) → 컷 만들기 · 합치기 */
 async function briefCatalog() {
-  const { BRIEFS } = await import('../src/scene/briefs.js'), only = A.genres ? String(A.genres).split(',') : Object.keys(BRIEFS), terms = {}
-  for (const g of only) { const b = BRIEFS[g]; if (b) terms[g] = [...b.shots, ...b.places.slice(0, +(A.places || 2)).map((pl) => `${b.shots[0].split(' ').slice(0, 2).join(' ')} ${pl}`)] }
-  const all = []; for (const [k, fn] of Object.entries(SHOT_SOURCES)) { try { const got = await fn(fetch, { terms }); log('브리프 컷', k, got.length, JSON.stringify(got.reduce((o, c) => ((o[c.sub] = (o[c.sub] || 0) + 1), o), {}))); all.push(...got) } catch (e) { log('브리프 컷', k, '실패 (건너뜀):', String(e.message || e).slice(0, 160)) } }
-  const seen = new Set(), ok = []; for (const c of all) { if (seen.has(c.id) || !c.url) continue; seen.add(c.id); const L = checkLicense(c); if (!L.ok) continue; c.pack = L.pack; c.L = L.L; c.genre = c.sub; ok.push(c) }
-  log('브리프 후보:', all.length, '→ 라이선스 통과', ok.length); await wr(join(WORK, 'candidates.json'), ok)
+  const { BRIEFS, shotTerms } = await import('../src/scene/briefs.js'), only = A.genres ? String(A.genres).split(',') : Object.keys(BRIEFS), terms = {}
+  for (const g of only) if (BRIEFS[g]) terms[g] = shotTerms(g, +(A.places || 6))
+  log('브리프 검색어:', Object.values(terms).reduce((x, l) => x + l.length, 0), '개 ·', only.length, '장르')
+  const all = [], qi = A.qi !== '0' /* 위키미디어 "우수 이미지" 안에서도 한 번 더 */
+  for (const [k, fn] of Object.entries(SHOT_SOURCES)) { try { const got = await fn(fetch, k === 'wikimediaShots' ? { terms, per: 50, pages: +(A.pages || 2), variants: qi ? ['', ' incategory:"Quality_images"'] : [''] } : { terms, pages: +(A.ovPages || 1), minW: 1600 }); log('브리프 컷', k, got.length, JSON.stringify(got.reduce((o, c) => ((o[c.sub] = (o[c.sub] || 0) + 1), o), {}))); all.push(...got) } catch (e) { log('브리프 컷', k, '실패 (건너뜀):', String(e.message || e).slice(0, 160)) } }
+  const seen = new Set(), ok = []; for (const c of all.sort((x, y) => (y.qi ? 1 : 0) - (x.qi ? 1 : 0))) { if (seen.has(c.id) || !c.url) continue; seen.add(c.id); const L = checkLicense(c); if (!L.ok) continue; c.pack = L.pack; c.L = L.L; c.genre = c.sub; ok.push(c) }
+  const cap = +(A.cap || 2200), byG = {}; for (const c of ok) (byG[c.genre] = byG[c.genre] || []).push(c); const out = Object.values(byG).flatMap((l) => l.slice(0, cap)) /* 장르마다 많아야 cap 장 (우수 이미지 먼저) */
+  log('브리프 후보:', all.length, '→ 라이선스 통과', ok.length, '→ 장르별 상한', out.length, JSON.stringify(Object.fromEntries(Object.entries(byG).map(([g, l]) => [g, Math.min(cap, l.length)])))); await wr(join(WORK, 'candidates.json'), out)
 }
+/* 브리프 채점 (조각마다 · --shard i/n): 받기 → 품질 관문 → CLIP 한 번(장르 · 감성 · 거절 · 작품성 · 서술어) → 화소 통계 → 판정 → 썸네일. 결과 work/bscored-i.json */
 async function briefScoreStage() {
-  const { ALL_PROMPTS, scoreScene, verdict, CUT, packFit } = await import('../src/scene/briefs.js'), cut = { ...CUT, ...(A.cut ? JSON.parse(A.cut) : {}) }, all = await rd(join(WORK, 'scored.json'), [])
-  const M = A['fake-clip'] ? fakeClip() : await clipModels(), prompts = ALL_PROMPTS(), T = await M.text(prompts.map((p) => p[1])), S = await img(), list = all.filter((c) => c.kind === 'shot' && c.pass)
-  let n = 0, kept = 0; const why = {}
-  await pool(list, +(A.conc || 3), async (c) => {
-    const buf = await get(c.thumb || c.url), m = await S(buf).metadata(), w = 640, h = Math.max(2, Math.round(640 * (m.height || 360) / (m.width || 640))), { data } = await S(buf).resize(w, h, { fit: 'fill' }).removeAlpha().raw().toBuffer({ resolveWithObject: true })
-    const sc = scoreScene(await M.image(new Uint8Array(data), w, h, { flat: true }), T, prompts), v = verdict(sc, cut), g = c.genre || c.sub, rank = Object.entries(sc.fit).sort((a, b) => b[1] - a[1]).findIndex(([k]) => k === g)
-    const ok = v.ok && rank >= 0 && rank < 3 && (sc.fit[g] || 0) >= 0.12; c.cur = { ...sc, ok, why: ok ? '' : v.why || `장르(${g})와 덜 맞아요 (순위 ${rank + 1})` }; c.g = packFit(sc.fit); c.ap = Math.round(sc.appeal * 255); if (!ok) { c.pass = false; why[c.cur.why.split(':')[0]] = (why[c.cur.why.split(':')[0]] || 0) + 1 } else kept++
-    if (++n % 50 === 0) log(`브리프 채점 ${n}/${list.length} · 통과 ${kept}`)
+  const { ALL_PROMPTS, scoreScene, verdict, CUT, packFit } = await import('../src/scene/briefs.js'), { techStats } = await import('../src/scene/craft.js'), cut = { ...CUT, ...(A.cut ? JSON.parse(A.cut) : {}) }
+  const cands = await rd(join(WORK, 'candidates.json'), []), [si, sn] = String(A.shard || '0/1').split('/').map(Number), mine = cands.filter((_, i) => i % sn === si)
+  const M = A['fake-clip'] ? fakeClip() : await clipModels(), prompts = ALL_PROMPTS(), T = await M.text(prompts.map((p) => p[1])), DT = A['fake-clip'] ? null : await M.text(DESC.map(prompt)), S = await img(), td = join(WORK, 'thumbs'); await mkdir(td, { recursive: true })
+  const descOf = (e) => { if (!DT) return null; const sc = new Float32Array(N); for (const [g] of GROUPS) { const [a, b] = groupOf(g), lg = []; for (let i = a; i < b; i++) lg.push(100 * DT[i].reduce((x, y, k) => x + y * e[k], 0)); const mx = Math.max(...lg), ex = lg.map((x) => Math.exp(x - mx)), z = ex.reduce((x, y) => x + y, 0); for (let i = a; i < b; i++) sc[i] = ex[i - a] / z } return sc }
+  let n = 0, kept = 0; const why = {}, out = [], t0 = Date.now()
+  await pool(mine, +(A.conc || 4), async (c) => {
+    const buf = await get(c.thumb || c.url), m0 = await S(buf).metadata(); if (c.src === 'openverse' && m0.width) { c.w = m0.width; c.h = m0.height }
+    const w0 = 1024, h0 = Math.max(2, Math.round(1024 * (m0.height || 640) / (m0.width || 1024))), big = new Uint8Array((await S(buf).resize(w0, h0, { fit: 'fill' }).removeAlpha().raw().toBuffer({ resolveWithObject: true })).data)
+    const gq = gate(big, w0, h0, { w: c.w, h: c.h }, { shot: true, minW: c.src === 'openverse' ? 1600 : 2400, blurMin: 25 }); c.q = gq.score; c.hash = gq.hash; c.stats = gq.stats; c.pass = gq.pass; c.why = gq.why
+    const w = 512, h = Math.max(2, Math.round(512 * h0 / w0)), small = new Uint8Array((await S(Buffer.from(big), { raw: { width: w0, height: h0, channels: 3 } }).resize(w, h, { fit: 'fill' }).raw().toBuffer({ resolveWithObject: true })).data), tech = techStats(small, w, h)
+    const emb = await M.image(small, w, h, { flat: true }), sc = scoreScene(emb, T, prompts, tech), v = verdict(sc, cut), g = c.genre || c.sub, rank = Object.entries(sc.fit).sort((x, y) => y[1] - x[1]).findIndex(([k]) => k === g)
+    const ds = descOf(emb), kw = kwScores(c.text); if (ds) for (let i = 0; i < N; i++) ds[i] += kw[i] * 0.15; c.desc = pack(sceneDist({ clip: ds || kw, stats: gq.stats })); c.theme = c.sub
+    const ok = gq.pass && v.ok && rank >= 0 && rank < 3 && (sc.fit[g] || 0) >= 0.12; c.cur = { ...sc, ok, why: ok ? '' : !gq.pass ? '품질 관문: ' + (gq.why || []).join(', ').slice(0, 60) : v.why || `장르(${g})와 덜 맞아요 (순위 ${rank + 1})`, shot: true, name: c.title, genre: g }
+    c.g = packFit(sc.fit); c.ap = Math.round(sc.appeal * 255); c.pass = ok; if (ok) kept++; else { const k = c.cur.why.split(/[:(]/)[0].trim(); why[k] = (why[k] || 0) + 1 }
+    await S(Buffer.from(small), { raw: { width: w, height: h, channels: 3 } }).resize(320, 180, { fit: 'cover' }).jpeg({ quality: 70 }).toFile(join(td, c.id + '.jpg')); out.push(c)
+    if (++n % 100 === 0) log(`브리프 채점 ${n}/${mine.length} · 통과 ${kept} · ${((Date.now() - t0) / n / 1000).toFixed(2)}초/장`)
   })
-  log('브리프 채점 끝:', kept, '/', list.length, JSON.stringify(why)); await wr(join(WORK, 'scored.json'), all)
+  log(`브리프 채점 끝 (조각 ${si}/${sn}):`, kept, '/', mine.length, '· 받음', out.length, JSON.stringify(why)); await wr(join(WORK, `bscored-${si}.json`), out)
+}
+/* 브리프 고르기: 조각 결과를 합쳐 → 같은 사진 빼기 → 장르마다 (적합도 × 작품성) 상위 --per 장 → selected.json + 검토용 채점(curation-900.json) */
+async function briefPickStage() {
+  const ex = A.existing ? await rd(A.existing, { scenes: [], shots: [] }) : { shots: [] }, have = new Set((ex.shots || []).map((x) => x.id)), all = []
+  for (const f of await readdir(WORK)) if (/^bscored-\d+\.json$/.test(f)) all.push(...(await rd(join(WORK, f), [])))
+  const okAll = dedupe(all.filter((c) => c.pass && c.cur && c.cur.ok && !have.has(c.id))), per = +(A.per || 200), out = [], byG = {}
+  const rankOf = (c, g) => c.cur.fit[g] * (Math.max(0, (c.cur.aes ?? 5) - 4)) * (c.cur.pro ?? 0.6) * (1 - (c.cur.close ?? 0.2))
+  for (const c of okAll) (byG[c.genre] = byG[c.genre] || []).push(c)
+  for (const [g, l] of Object.entries(byG)) { l.sort((a, b) => rankOf(b, g) - rankOf(a, g)); out.push(...l.slice(0, per)) }
+  log('브리프 고르기: 채점', all.length, '· 통과', okAll.length, '(같은 사진 뺀 뒤) · 고름', out.length, JSON.stringify(Object.fromEntries(Object.entries(byG).map(([g, l]) => [g, `${Math.min(per, l.length)}/${l.length}`]))))
+  await wr(join(WORK, 'selected.json'), out); await wr(join(WORK, 'gaps.json'), { gaps: [], terms: [] }); await wr(join(WORK, 'skies.json'), [])
+  const cur = {}; for (const c of all) cur[c.id] = { ...c.cur, picked: out.includes(c) }; await wr(join(WORK, 'curation-900.json'), cur)
 }
 async function curateStage() {
   if (A.briefs) { /* 장르마다 (그 장르 적합도 × 감성) 상위 --per 장, 이미 있는 컷 · 중복 빼고 */
@@ -333,12 +357,12 @@ async function sceneRGB(s, W = 1024, H = 512) { /* 층을 앱과 같은 순서(�
   const { data, info } = await S(png).removeAlpha().raw().toBuffer({ resolveWithObject: true }); if (info.channels !== 3) throw new Error('채널 ' + info.channels); return { rgb: new Uint8Array(data), W, H, flat: false }
 }
 async function rescoreStage() {
-  const { ALL_PROMPTS, scoreScene, verdict } = await import('../src/scene/briefs.js'), ix = await rd(A.existing, { scenes: [], shots: [] })
+  const { ALL_PROMPTS, scoreScene, verdict } = await import('../src/scene/briefs.js'), { techStats } = await import('../src/scene/craft.js'), ix = await rd(A.existing, { scenes: [], shots: [] })
   const items = [...ix.scenes.filter((s) => s.kind !== 'synthetic'), ...(ix.shots || []).map((s) => ({ ...s, kind: 'shot' }))], [si, sn] = String(A.shard || '0/1').split('/').map(Number), mine = items.filter((_, i) => i % sn === si)
   const M = A['fake-clip'] ? fakeClip() : await clipModels(), prompts = ALL_PROMPTS(), T = await M.text(prompts.map((p) => p[1])), out = {}, S = await img(), td = join(WORK, 'thumbs'); await mkdir(td, { recursive: true })
   let n = 0; const t0 = Date.now()
   await pool(mine, +(A.conc || 3), async (s) => {
-    const r = await sceneRGB(s), emb = await M.image(r.rgb, r.W, r.H, { flat: r.flat }), sc = scoreScene(emb, T, prompts), v = verdict(sc)
+    const r = await sceneRGB(s), emb = await M.image(r.rgb, r.W, r.H, { flat: r.flat }), tw = 512, tH = Math.max(2, Math.round(512 * r.H / r.W)), small = new Uint8Array((await S(Buffer.from(r.rgb), { raw: { width: r.W, height: r.H, channels: 3 } }).resize(tw, tH, { fit: 'fill' }).raw().toBuffer({ resolveWithObject: true })).data), sc = scoreScene(emb, T, prompts, techStats(small, tw, tH)), v = verdict(sc) /* 작품성: 화소 통계까지 */
     out[s.id] = { ...sc, ok: v.ok, why: v.why, shot: s.kind === 'shot', name: s.name, theme: s.theme }
     const th = r.flat ? S(Buffer.from(r.rgb), { raw: { width: r.W, height: r.H, channels: 3 } }).resize(320, 180, { fit: 'cover' }) : S(Buffer.from(r.rgb), { raw: { width: r.W, height: r.H, channels: 3 } }).extract({ left: Math.round(r.W * 0.25), top: Math.round(r.H * 0.3), width: Math.round(r.W * 0.5), height: Math.round(r.H * 0.36) }).resize(320, 180, { fit: 'fill' })
     await th.jpeg({ quality: 70 }).toFile(join(td, s.id + '.jpg'))
@@ -357,19 +381,27 @@ async function sheet(file, list, label) { /* 검토 시트: 6열 썸네일 + 글
 async function reviewStage() {
   const { GENRES, verdict, CUT } = await import('../src/scene/briefs.js'), cut = { ...CUT, ...(A.cut ? JSON.parse(A.cut) : {}) }, all = {}
   for (const f of await readdir(WORK)) if (/^curation-\d+\.json$/.test(f)) Object.assign(all, await rd(join(WORK, f), {}))
-  const E = Object.entries(all).map(([id, x]) => { const v = verdict(x, cut); return { id, ...x, ok: v.ok, why: v.why } }), out = A.out || 'out/review'; await mkdir(out, { recursive: true })
+  const E = Object.entries(all).map(([id, x]) => { const v = 'picked' in x ? { ok: !!x.ok, why: x.why || '' } /* 브리프 채점: 품질 관문 · 장르 순위까지 이미 판정 */ : verdict(x, cut); return { id, ...x, ok: v.ok, why: v.why } }), out = A.out || 'out/review'; await mkdir(out, { recursive: true })
   const ok = E.filter((e) => e.ok), bad = E.filter((e) => !e.ok), why = {}; for (const e of bad) why[e.why] = (why[e.why] || 0) + 1
   const perG = Object.fromEntries(GENRES.map((g) => [g, ok.filter((e) => !e.shot && e.best === g).length])), perGshot = Object.fromEntries(GENRES.map((g) => [g, ok.filter((e) => e.shot && e.best === g).length]))
   const q = (a, f) => { const v = a.map(f).sort((x, y) => x - y); return v.length ? [0.1, 0.5, 0.9].map((p) => v[Math.floor((v.length - 1) * p)].toFixed(2)).join('/') : '-' }
-  const sum = { cut, total: E.length, ok: ok.length, rejected: bad.length, why, perGenre: perG, perGenreShots: perGshot, appeal: q(E, (e) => e.appeal), rej: q(E, (e) => e.rej), genreMass: q(E, (e) => e.genreMass) }
+  const qn = (a, f) => q(a.filter((e) => f(e) != null), f), sum = { cut, total: E.length, ok: ok.length, rejected: bad.length, why, perGenre: perG, perGenreShots: perGshot, picked: E.filter((e) => e.picked).length, appeal: q(E, (e) => e.appeal), rej: q(E, (e) => e.rej), genreMass: q(E, (e) => e.genreMass), aes: qn(E, (e) => e.aes), pro: qn(E, (e) => e.pro), close: qn(E, (e) => e.close), aesOk: qn(ok, (e) => e.aes) }
   log('검토:', JSON.stringify(sum)); await wr(join(out, 'summary.json'), sum)
-  const lab = (e) => `${e.ok ? 'OK' : 'NO'} ap${e.appeal.toFixed(2)} rj${e.rej.toFixed(2)} gm${e.genreMass.toFixed(2)} ${e.best}${e.ok ? '' : ' ' + (e.rejK || '')}`
+  const f2 = (x) => (x == null ? '-' : (+x).toFixed(2)), WHY_EN = (w) => (!w ? '' : /가까이/.test(w) ? 'close' : /스냅/.test(w) ? 'snap' : /미학/.test(w) ? 'aes' : /초점/.test(w) ? 'blur' : /노출/.test(w) ? 'expo' : /대비/.test(w) ? 'flat' : /색/.test(w) ? 'color' : /평범/.test(w) ? 'plain' : /장르/.test(w) ? 'genre' : /관문/.test(w) ? 'gate' : 'rej')
+  const lab = (e) => `${e.ok ? 'OK' : 'NO ' + WHY_EN(e.why)} ae${f2(e.aes)} pr${f2(e.pro)} cl${f2(e.close)} ap${f2(e.appeal)} ${e.best}${e.picked ? ' *' : ''}` /* 시트 글자: 미학 · 전문 · 가까이 · 감성 · 최고 장르 (* = 고름) */
   for (const g of GENRES) { const top = ok.filter((e) => !e.shot).sort((a, b) => b.fit[g] * b.appeal - a.fit[g] * a.appeal).slice(0, 24); await sheet(join(out, `genre-${g}.jpg`), top, (e) => `${g} ${(e.fit[g] * 100).toFixed(0)}% ` + lab(e)) }
   const shuffle = (a, seed = 7) => { let s = seed; return a.map((x) => [x, (s = (s * 1103515245 + 12345) & 0x7fffffff)]).sort((x, y) => x[1] - y[1]).map((x) => x[0]) }
   await sheet(join(out, 'rejected-sample.jpg'), shuffle(bad.filter((e) => !e.shot)).slice(0, 48), lab)
   await sheet(join(out, 'kept-lowest-appeal.jpg'), ok.filter((e) => !e.shot).sort((a, b) => a.appeal - b.appeal).slice(0, 36), lab)
   await sheet(join(out, 'kept-random.jpg'), shuffle(ok.filter((e) => !e.shot), 11).slice(0, 48), lab)
   await sheet(join(out, 'shots-kept.jpg'), shuffle(ok.filter((e) => e.shot), 3).slice(0, 36), lab); await sheet(join(out, 'shots-rejected.jpg'), shuffle(bad.filter((e) => e.shot), 5).slice(0, 36), lab)
+  /* 작품성 시트 (2026-11-21): 가까이 찍어 빠진 것 · 작품성으로 빠진 것 · 남은 것 중 미학 점수 · 전문성 낮은 것 · 고른 것 무작위 */
+  await sheet(join(out, 'rejected-close.jpg'), shuffle(bad.filter((e) => /가까이/.test(e.why)), 13).slice(0, 36), lab)
+  await sheet(join(out, 'rejected-craft.jpg'), shuffle(bad.filter((e) => /작품성/.test(e.why)), 17).slice(0, 48), lab)
+  await sheet(join(out, 'kept-lowest-aes.jpg'), ok.filter((e) => e.aes != null).sort((a, b) => a.aes - b.aes).slice(0, 36), lab)
+  await sheet(join(out, 'kept-lowest-pro.jpg'), ok.filter((e) => e.pro != null).sort((a, b) => a.pro - b.pro).slice(0, 36), lab)
+  await sheet(join(out, 'kept-highest-close.jpg'), ok.filter((e) => e.close != null).sort((a, b) => b.close - a.close).slice(0, 36), lab)
+  const picked = E.filter((e) => e.picked); if (picked.length) await sheet(join(out, 'picked-random.jpg'), shuffle(picked, 19).slice(0, 60), lab)
   await wr(join(out, 'curation.json'), all)
 }
 async function applyStage() {
@@ -379,6 +411,6 @@ async function applyStage() {
   const out = { ...ix, made: new Date().toISOString().slice(0, 10), curated: { cut, at: new Date().toISOString(), from: ix.scenes.length + (ix.shots || []).length }, count: scenes.length, scenes, shots }
   await wr(A.out || 'out/scenes/index.json', out); log('반영:', ix.scenes.length, '→', scenes.length, '장면 ·', (ix.shots || []).length, '→', shots.length, '컷')
 }
-const ST = { 'ab-depth': abDepth, 'calib-level': calibLevel, 'synth-skies': synthSkies, 'synth-shots': synthShots, catalog, gate: gateStage, curate: curateStage, build: buildStage, merge: mergeStage, skies: skiesStage, rescore: rescoreStage, review: reviewStage, apply: applyStage, 'brief-score': briefScoreStage }
+const ST = { 'ab-depth': abDepth, 'calib-level': calibLevel, 'synth-skies': synthSkies, 'synth-shots': synthShots, catalog, gate: gateStage, curate: curateStage, build: buildStage, merge: mergeStage, skies: skiesStage, rescore: rescoreStage, review: reviewStage, apply: applyStage, 'brief-score': briefScoreStage, 'brief-pick': briefPickStage }
 for (const s of String(A.stage || 'catalog').split(',')) { if (!ST[s]) throw new Error('모르는 --stage ' + s); log('==', s); await ST[s]() }
 void isPano

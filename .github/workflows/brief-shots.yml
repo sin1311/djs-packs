@@ -1,27 +1,33 @@
-# 장르 브리프 사진 (2026-11-21): Actions 탭 → brief-shots → Run workflow
-#  사용자: "노래에 맞는 도시에 가거나 활동을 한다고 생각해 봐 — 캐롤 = 유럽 크리스마스 마켓, 힙합 = 뉴욕 어두운 밤 골목, 시티팝 = 노을 진 대도시 · 올드카 안 …
-#           멋짐 · 낭만 · 추억 같은 좋은 감정 · 불쾌하거나 이상한 사진은 빼고"
-#  src/scene/briefs.js 의 장르마다 사진 검색어(+ 명소)로 보통 사진을 모아요 (Openverse · 위키미디어 공용 · CC0/PDM/CC BY/CC BY-SA 만)
-#  → 품질 관문 → CLIP 채점(감성 · 불쾌 거절 · 그 장르가 상위 3 안) → 장르마다 상위 per 장 → 얼굴 · 번호판 흐림 · 깊이(2.5D) → Hugging Face 에 올리고
-#  → 지금 목록(scenes 가지 index.json)의 컷에 더해요 (장면마다 g = 장르 적합도 · ap = 감성). 앱은 장르에 맞는 360° 장면이 모자라면 이 사진들로 "사진 세계"를 틀어요.
+# 장르 브리프 사진 v2 (2026-11-21 둘째 지시): Actions 탭 → brief-shots → Run workflow
+#  사용자: "피사체를 너무 가까이서 찍은 건 빼 줘 · 사람들이 잘 찍었다 · 작품으로 남겨도 될 만하다고 하는 사진의 공통점을 확실하게 충족하는 사진만 ·
+#           2000~3000장보다 모자라면 다시 구하자" (+ 첫 지시: 노래에 맞는 곳 · 멋짐 · 낭만 · 추억 · 불쾌/이상한 사진 빼기)
+#  ① 모으기: 장르마다 검색어 ~18개 + 명소 → Openverse · 위키미디어 공용(그냥 + "우수 이미지" 안에서) · CC0/PDM/CC BY/CC BY-SA
+#  ② 채점(16조각): 품질 관문 · CLIP(장르 · 감성 · 불쾌 거절 · 전문 vs 아마추어 · 넓게 vs 가까이) · 미학 점수(LAION V1) · 화소 통계(초점 · 노출 · 대비 · 색)
+#  ③ 고르기 + 검토 시트(review 가지) — stop_after_pick 이면 여기서 멈춰요(기준값을 시트로 보고 정한 뒤 from_run 으로 다시)
+#  ④ 2.5D 만들기(얼굴 · 번호판 흐림 · 깊이) → Hugging Face → ⑤ 지금 목록에 더하기
 name: brief-shots
 on:
   workflow_dispatch:
     inputs:
       genres: { description: '장르 (쉼표로 · 비우면 14개 모두)', default: '' }
-      per: { description: '장르마다 고를 사진 수', default: '30' }
+      per: { description: '장르마다 고를 사진 수 (14장르 × 200 = 2800)', default: '200' }
+      cut: { description: '판정 기준 덮어쓰기 JSON (예: {"aes":5.2,"pro":0.6,"close":0.35})', default: '' }
+      stop_after_pick: { description: '검토 시트까지만 (만들기 · 합치기 안 함)', type: boolean, default: false }
+      from_run: { description: '모으기 · 채점을 건너뛰고 이 실행(run id)의 채점을 다시 써요', default: '' }
       hf_repo: { description: 'Hugging Face 데이터셋', default: '9birth/djs-scenes' }
 permissions:
   contents: write
+  actions: read
 concurrency:
   group: scenes-index
   cancel-in-progress: false
 env:
-  SHARDS: 6
+  SHARDS: 16
 jobs:
-  prepare:
+  catalog:
+    if: ${{ github.event.inputs.from_run == '' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 240
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -29,35 +35,88 @@ jobs:
       - name: 도구
         run: |
           npm init -y > /dev/null
-          ONNXRUNTIME_NODE_INSTALL_CUDA=skip npm i sharp@0.33.5 onnxruntime-node@1.20.1 @huggingface/transformers@3.1.2
-      - name: 지금 목록
-        run: |
-          mkdir -p prev && curl -fsL https://raw.githubusercontent.com/${{ github.repository }}/scenes/index.json -o prev/index.json
-          node -e "const x=require('./prev/index.json');console.log('장면',x.scenes.length,'· 컷',(x.shots||[]).length)"
-      - name: 모으기 · 관문 · 브리프 채점 · 고르기
+          npm i sharp@0.33.5
+      - name: 모으기
         env: { GENRES: '${{ github.event.inputs.genres }}' }
         run: |
-          node scripts/scene-mass.mjs --stage catalog --briefs 1 ${GENRES:+--genres "$GENRES"}
-          node scripts/scene-mass.mjs --stage gate --clip --conc 8
-          node scripts/scene-mass.mjs --stage brief-score --conc 3
-          node scripts/scene-mass.mjs --stage curate --briefs 1 --per "${{ github.event.inputs.per }}" --existing prev/index.json
-          node -e "console.log('고른 사진', require('./work/selected.json').length)"
+          node scripts/scene-mass.mjs --stage catalog --briefs 1 --places 6 --pages 2 ${GENRES:+--genres "$GENRES"}
+          node -e "console.log('후보', require('./work/candidates.json').length)"
       - uses: actions/upload-artifact@v4
-        with: { name: work, path: work/ }
-  build:
-    needs: prepare
+        with: { name: cands, path: work/candidates.json }
+  score:
+    needs: catalog
+    if: ${{ github.event.inputs.from_run == '' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 240
+    timeout-minutes: 300
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3, 4, 5]
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - uses: actions/download-artifact@v4
-        with: { name: work, path: work/ }
+        with: { name: cands, path: work/ }
+      - name: 도구
+        run: |
+          npm init -y > /dev/null
+          ONNXRUNTIME_NODE_INSTALL_CUDA=skip npm i sharp@0.33.5 onnxruntime-node@1.20.1 @huggingface/transformers@3.1.2
+      - name: 채점 (조각 ${{ matrix.shard }})
+        env: { CUT: '${{ github.event.inputs.cut }}' }
+        run: node scripts/scene-mass.mjs --stage brief-score --shard ${{ matrix.shard }}/$SHARDS --conc 4 ${CUT:+--cut "$CUT"}
+      - uses: actions/upload-artifact@v4
+        with: { name: 'bs-${{ matrix.shard }}', path: work/ }
+  pick:
+    needs: [catalog, score]
+    if: ${{ always() && (github.event.inputs.from_run != '' || needs.score.result == 'success' || needs.score.result == 'failure') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: actions/download-artifact@v4
+        if: ${{ github.event.inputs.from_run == '' }}
+        with: { pattern: 'bs-*', path: work/, merge-multiple: true }
+      - uses: actions/download-artifact@v4
+        if: ${{ github.event.inputs.from_run != '' }}
+        with: { pattern: 'bs-*', path: work/, merge-multiple: true, run-id: '${{ github.event.inputs.from_run }}', github-token: '${{ github.token }}' }
+      - name: 도구
+        run: |
+          npm init -y > /dev/null
+          npm i sharp@0.33.5
+      - name: 다시 판정(from_run + cut) · 고르기 · 검토 시트
+        env: { CUT: '${{ github.event.inputs.cut }}' }
+        run: |
+          mkdir -p prev && curl -fsL "https://raw.githubusercontent.com/${{ github.repository }}/scenes/index.json?t=$(date +%s)" -o prev/index.json
+          if [ -n "$CUT" ]; then node -e "
+          const fs=require('fs');(async()=>{const {verdict,CUT}=await import('./src/scene/briefs.js');const cut={...CUT,...JSON.parse(process.env.CUT)};
+          for(const f of fs.readdirSync('work').filter(f=>/^bscored-\d+\.json$/.test(f))){const l=JSON.parse(fs.readFileSync('work/'+f));for(const c of l){if(!c.cur)continue;const g=c.genre,r=Object.entries(c.cur.fit).sort((a,b)=>b[1]-a[1]).findIndex(([k])=>k===g),v=verdict(c.cur,cut),gate=!/^품질 관문/.test(c.cur.why||'');const ok=gate&&v.ok&&r>=0&&r<3&&(c.cur.fit[g]||0)>=0.12;c.cur.ok=ok;c.pass=ok;c.cur.why=ok?'':(!gate?c.cur.why:(v.why||'장르와 덜 맞아요'))}fs.writeFileSync('work/'+f,JSON.stringify(l))}})()"; fi
+          node scripts/scene-mass.mjs --stage brief-pick --per "${{ github.event.inputs.per }}" --existing prev/index.json
+          node scripts/scene-mass.mjs --stage review --out review ${CUT:+--cut "$CUT"}
+          node -e "const s=require('./review/summary.json');console.log(JSON.stringify(s).slice(0,1500))"
+      - name: review 가지에 올리기
+        run: |
+          git config --global user.name 'github-actions[bot]'; git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          printf '# 브리프 사진 검토 (회차 %s)\n\npicked-random = 고른 사진 · rejected-close = 가까이 찍어 빠진 것 · rejected-craft = 작품성으로 빠진 것 · kept-lowest-aes/pro = 남은 것 중 미학 · 전문성 낮은 것 · kept-highest-close = 남은 것 중 가장 가까운 것\n' "${{ github.run_number }}" > review/README.md
+          (cd review && git init -q -b review && git add -A && git commit -q -m "브리프 사진 검토 (회차 ${{ github.run_number }})" && for k in 1 2 3 4; do git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" review && break; sleep $((k * 15)); done)
+      - uses: actions/upload-artifact@v4
+        with: { name: picked, path: work/selected.json }
+  build:
+    needs: pick
+    if: ${{ github.event.inputs.stop_after_pick != 'true' && needs.pick.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: actions/download-artifact@v4
+        with: { name: picked, path: work/ }
       - name: 도구 · 모델 (Depth Anything V2 Small = Apache-2.0 · YuNet = MIT · SFace = Apache-2.0)
         run: |
           npm init -y > /dev/null
@@ -66,13 +125,13 @@ jobs:
           curl -fL -o models/dav2s.onnx https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/main/onnx/model.onnx
           curl -fL -o models/yunet.onnx https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx
           curl -fL -o models/sface.onnx https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx
-      - name: 사진 만들기 (조각 ${{ matrix.shard }})
-        run: node scripts/scene-mass.mjs --stage build --shard ${{ matrix.shard }}/$SHARDS --out out/brief-r${{ github.run_number }}-${{ matrix.shard }} --depth models/dav2s.onnx --face models/yunet.onnx --sface models/sface.onnx
+      - name: 2.5D 만들기 (조각 ${{ matrix.shard }})
+        run: node scripts/scene-mass.mjs --stage build --shard ${{ matrix.shard }}/$SHARDS --out out/brief2-r${{ github.run_number }}-${{ matrix.shard }} --depth models/dav2s.onnx --face models/yunet.onnx --sface models/sface.onnx
       - name: Hugging Face 에 올리기
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          D=out/brief-r${{ github.run_number }}-${{ matrix.shard }}; B=$(basename $D)
+          D=out/brief2-r${{ github.run_number }}-${{ matrix.shard }}; B=$(basename $D)
           if [ -z "$HF_TOKEN" ]; then echo "HF_TOKEN 비밀값이 없어요"; exit 1; fi
           python3 -m pip install -q -U huggingface_hub
           HF_REPO="${{ github.event.inputs.hf_repo }}" D="$D" B="$B" python3 - <<'PY'
@@ -92,7 +151,7 @@ jobs:
         with: { name: 'part-${{ matrix.shard }}', path: parts/ }
   merge:
     needs: build
-    if: always()
+    if: ${{ always() && needs.build.result != 'skipped' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -102,10 +161,10 @@ jobs:
         with: { pattern: 'part-*', path: out/, merge-multiple: true }
       - name: 지금 목록에 더하기 · scenes 가지에 올리기
         run: |
-          mkdir -p prev && curl -fsL https://raw.githubusercontent.com/${{ github.repository }}/scenes/index.json -o prev/index.json # 합치는 순간의 목록 (그 사이 큐레이션 반영이 있었어도)
+          mkdir -p prev && curl -fsL "https://raw.githubusercontent.com/${{ github.repository }}/scenes/index.json?t=$(date +%s)" -o prev/index.json # 합치는 순간의 목록
           node scripts/scene-mass.mjs --stage merge --partsDir out --existing prev/index.json --base-hf "${{ github.event.inputs.hf_repo }}" --out out/scenes
           node -e "const a=require('./prev/index.json'),b=require('./out/scenes/index.json');console.log('장면',a.scenes.length,'→',b.scenes.length,'· 컷',(a.shots||[]).length,'→',b.shots.length,'· 하늘',b.skies.length);if(b.scenes.length<a.scenes.length||b.shots.length<(a.shots||[]).length||b.skies.length<(a.skies||[]).length){console.error('목록이 줄었어요 — 올리지 않아요');process.exit(1)}"
           git config --global user.name 'github-actions[bot]'; git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           git clone -q --depth 1 -b scenes "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" site
           cp out/scenes/index.json site/index.json
-          (cd site && git add -A && git commit -q -m "장르 브리프 사진 (회차 ${{ github.run_number }})" && for k in 1 2 3 4; do git push origin scenes && break; sleep $((k * 15)); git pull -q --rebase origin scenes; done)
+          (cd site && git add -A && git commit -q -m "장르 브리프 사진 v2 (회차 ${{ github.run_number }})" && for k in 1 2 3 4; do git push origin scenes && break; sleep $((k * 15)); git pull -q --rebase origin scenes; done)
