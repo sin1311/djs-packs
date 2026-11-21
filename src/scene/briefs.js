@@ -73,7 +73,24 @@ export const SHOTS_MORE = {
   reggaeton: ['tropical beach sunset palms', 'colorful colonial street', 'havana street', 'caribbean beach', 'san juan old town', 'cartagena street colorful', 'palm beach promenade', 'tropical sunset sea', 'latin plaza evening', 'colorful houses street'],
   disco: ['broadway theater lights', 'las vegas strip night', 'neon signs street night', 'retro neon city', 'theater marquee night', 'glittering city night', 'dance hall lights', 'paris night lights', 'vintage neon signs street', 'colorful lights night street'],
 }
-export const shotTerms = (g, places = 4) => { const b = BRIEFS[g]; if (!b) return []; return [...new Set([...b.shots, ...(SHOTS_MORE[g] || []), ...b.places.slice(0, places).map((pl) => `${b.shots[0].split(' ').slice(0, 2).join(' ')} ${pl}`)])] }
+/* 장르마다 중심 장면 × 어울리는 도시 · 지역 (검색어를 늘려 후보를 3배로) */
+export const SCENES_X = {
+  carol: [['christmas market', 'christmas lights'], ['Strasbourg', 'Nuremberg', 'Vienna', 'Prague', 'Cologne', 'Dresden', 'Colmar', 'Tallinn', 'Zagreb', 'Budapest', 'Munich', 'Salzburg', 'Copenhagen', 'Brussels', 'Basel', 'Krakow']],
+  waltz: [['old town evening', 'palace'], ['Vienna', 'Salzburg', 'Budapest', 'Prague', 'Paris', 'St Petersburg', 'Krakow', 'Ljubljana', 'Bruges', 'Lisbon', 'Seville', 'Florence']],
+  citypop: [['skyline sunset', 'street dusk'], ['Tokyo', 'Osaka', 'Yokohama', 'Los Angeles', 'Miami', 'Honolulu', 'Hong Kong', 'Seoul', 'Busan', 'San Francisco', 'Singapore', 'Taipei']],
+  trap: [['skyline night', 'downtown night'], ['Atlanta', 'New York', 'Chicago', 'Los Angeles', 'Houston', 'Toronto', 'Dubai', 'London', 'Detroit', 'Dallas', 'Philadelphia', 'Las Vegas']],
+  boombap: [['street night', 'street'], ['Brooklyn', 'Manhattan', 'Harlem', 'Bronx', 'Queens', 'Greenwich Village', 'SoHo', 'Lower East Side', 'Williamsburg', 'Chinatown New York', 'Times Square', 'Bushwick']],
+  lofi: [['street evening', 'alley night'], ['Kyoto', 'Tokyo', 'Taipei', 'Seoul', 'Osaka', 'Hanoi', 'Hoi An', 'Paris', 'Amsterdam', 'Lisbon', 'Kanazawa', 'Jiufen']],
+  house: [['beach sunset', 'nightlife'], ['Ibiza', 'Barcelona', 'Miami', 'Mykonos', 'Tel Aviv', 'Rio de Janeiro', 'Bali', 'Cancun', 'Nice', 'Valencia', 'Lisbon', 'Amsterdam']],
+  techno: [['night', 'illuminated architecture'], ['Berlin', 'Frankfurt', 'Detroit', 'Tokyo', 'Seoul', 'Shanghai', 'Rotterdam', 'Tbilisi', 'Leipzig', 'Hamburg', 'Oslo', 'Copenhagen']],
+  dnb: [['night skyline', 'light trails'], ['Hong Kong', 'Shanghai', 'Shenzhen', 'Tokyo', 'London', 'Singapore', 'Bangkok', 'Kuala Lumpur', 'Chongqing', 'Dubai', 'Seoul', 'Taipei']],
+  kpop: [['night', 'street night'], ['Seoul', 'Busan', 'Incheon', 'Gangnam', 'Myeongdong', 'Hongdae', 'Jongno', 'Itaewon', 'Jamsil', 'Yeouido', 'Daegu', 'Jeju']],
+  ballad: [['lake sunset', 'landscape'], ['Jeju', 'Lake Bled', 'Hallstatt', 'Kyoto', 'Banff', 'Lake Como', 'Dolomites', 'Norway fjord', 'Scotland', 'New Zealand', 'Hokkaido', 'Swiss Alps']],
+  rock: [['road landscape', 'cliffs'], ['Iceland', 'Scotland', 'California', 'Arizona', 'Utah', 'Norway', 'Ireland', 'Patagonia', 'Nevada', 'Cornwall', 'Faroe Islands', 'Big Sur']],
+  reggaeton: [['beach', 'colorful street'], ['Puerto Rico', 'Havana', 'Cartagena', 'Medellin', 'Santo Domingo', 'Panama City', 'Cancun', 'Tulum', 'Punta Cana', 'Miami', 'Barbados', 'Aruba']],
+  disco: [['night lights', 'neon'], ['Las Vegas', 'Broadway', 'Paris', 'Macau', 'Tokyo', 'London West End', 'Montreal', 'Melbourne', 'Shanghai', 'Chicago', 'Reno', 'Atlantic City']],
+}
+export const shotTerms = (g, places = 4) => { const b = BRIEFS[g]; if (!b) return []; const [sc, pl] = SCENES_X[g] || [[], []], x = []; for (const p of pl) for (const c of sc) x.push(`${p} ${c}`); return [...new Set([...b.shots, ...(SHOTS_MORE[g] || []), ...b.places.slice(0, places).map((pl) => `${b.shots[0].split(' ').slice(0, 2).join(' ')} ${pl}`), ...x])] }
 export const GENRES = Object.keys(BRIEFS)
 
 /* 감성: 사람에게 멋짐 · 낭만 · 추억 같은 좋은 감정을 불러일으키는 사진 */
@@ -89,6 +106,7 @@ export const REJECT = [
   ['어둡고 흐림', 'a very dark blurry low quality photo'], ['좁은 복도', 'a narrow empty corridor'], ['주유소 · 차고', 'a gas station or garage'], ['동굴 · 지하', 'a dark cave or underground tunnel'],
   ['군사', 'military vehicles or weapons'], ['으스스함', 'a creepy scary place'], ['사람 얼굴 가까이', 'a close up of people faces'], ['주차장', 'a multi storey car park'],
   /* 1차 검토 시트(2026-11-21)에서 찾은 것: 렌즈에 맺힌 물방울 · 찍는 사람 뒤통수 · 아이 · 우주에서 본 지도 · 텅 빈 연회장 */
+  ['그림 · 옛 지도', 'a painting, drawing or illustrated old map'], ['셀카 · 포즈', 'people posing for a selfie'], /* 2차 시트(2026-11-21 작품성): 옛 지도 그림 · 셀카 */
   ['렌즈 물방울', 'a blurry photo with water drops on the camera lens'], ['찍는 사람 머리', 'the back of a person head blocking the camera view'], ['어린이', 'a young child or little kids'], ['위성 지도', 'a satellite map of the earth from space'], ['빈 연회장', 'an empty banquet hall'],
 ]
 export const ALL_PROMPTS = () => { const out = []; for (const [g, b] of Object.entries(BRIEFS)) for (const p of b.prompts) out.push(['g:' + g, p]); for (const p of APPEAL) out.push(['appeal', p]); for (const p of PLAIN) out.push(['plain', p]); for (const [k, p] of REJECT) out.push(['rej:' + k, p]); out.push(...CRAFT_PROMPTS()); return out } /* 작품성 문장은 맨 뒤 — 감성 · 거절 · 장르 softmax 에는 안 들어가요 */
@@ -106,7 +124,7 @@ export function scoreScene(v, T, prompts = ALL_PROMPTS(), tech = null) {
   return { appeal: +(pa / Math.max(1e-9, pa + pp)).toFixed(3), plain: +pp.toFixed(3), rej: +rej.toFixed(3), rejK, genreMass: +pg.toFixed(3), fit, best: gk.reduce((a, g) => (fit[g] > (fit[a] ?? -1) ? g : a), gk[0]), ...craft }
 }
 /* 판정 (기본값은 Actions 의 검토 시트로 확인해 고쳐요): 거절 개념이 강하면 빼고, 감성이 낮거나 장르 쪽 확률이 너무 낮으면(어느 노래에도 안 어울림) 빼요 */
-export const CUT = { rej: 0.12, appeal: 0.55, genreMass: 0.25, close: 0.4, pro: 0.55, aes: 5.0, tech: TECH_CUT } /* close · pro · aes: 작품성 (검토 시트로 정해요 · 옛 채점처럼 값이 없으면 그 검사는 건너뛰어요) */
+export const CUT = { rej: 0.12, appeal: 0.55, genreMass: 0.25, close: 0.25, pro: 0.55, aes: 5.5, tech: TECH_CUT } /* 2차 시트: 미학 5.0~5.3 에 셀카 · 군중 얼굴 · 평범한 거리 · 위성 지도 → 5.5, 가까이 0.22~0.40 에 음식 노점 · 물건 → 0.25 */ /* close · pro · aes: 작품성 (검토 시트로 정해요 · 옛 채점처럼 값이 없으면 그 검사는 건너뛰어요) */
 export function verdict(sc, cut = CUT) {
   if (sc.rej >= cut.rej) return { ok: false, why: '불쾌 · 이상: ' + sc.rejK }
   if (sc.appeal < cut.appeal && !(cut.gmAlt != null && sc.genreMass >= cut.gmAlt)) return { ok: false, why: '평범 · 지루함' } /* gmAlt: 거리에서 찍은 사진이라 "평범" 쪽으로 기울어도 장르 분위기가 아주 강하면(밤 쇼핑 거리 · 네온) 살려요 */

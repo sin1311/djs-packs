@@ -15,7 +15,7 @@ import AES from './aes-b32.json' with { type: 'json' }
 export const PRO = ['an award winning professional photograph', 'a stunning photograph with beautiful composition and lighting', 'a professional travel photography shot', 'a cinematic wide shot with depth and leading lines', 'a beautiful photo taken at golden hour or blue hour', 'a well composed photo following the rule of thirds']
 export const AMATEUR = ['an amateur snapshot taken with a phone', 'a poorly composed casual photo', 'a blurry out of focus photo', 'an overexposed washed out photo', 'a dark underexposed noisy photo', 'a tilted crooked photo', 'a cluttered messy photo', 'a low quality compressed image']
 export const WIDE = ['a wide shot of a street', 'a wide view of a place', 'a cityscape', 'a landscape view', 'an establishing shot of a scene', 'a view of a square with buildings']
-export const CLOSE = ['a close-up photo of an object', 'a macro photo', 'a close-up of food on a plate', 'a close-up of a sign or text', 'a close-up portrait of a person', 'a detail shot filling the frame', 'a close-up of a flower or plant', 'a close-up of a product']
+export const CLOSE = ['a close-up photo of an object', 'a macro photo', 'a close-up of food on a plate', 'a close-up of a sign or text', 'a close-up portrait of a person', 'a detail shot filling the frame', 'a close-up of a flower or plant', 'a close-up of a product', 'a close-up of a market stall with food', 'a close-up of a few people']
 export const CRAFT_PROMPTS = () => [...PRO.map((p) => ['pro', p]), ...AMATEUR.map((p) => ['am', p]), ...WIDE.map((p) => ['wide', p]), ...CLOSE.map((p) => ['close', p])]
 const CRAFT_KEYS = new Set(['pro', 'am', 'wide', 'close'])
 export const isCraftKey = (k) => CRAFT_KEYS.has(k)

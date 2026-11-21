@@ -22,12 +22,12 @@ concurrency:
   group: scenes-index
   cancel-in-progress: false
 env:
-  SHARDS: 16
+  SHARDS: 20
 jobs:
   catalog:
     if: ${{ github.event.inputs.from_run == '' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 240
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -39,7 +39,7 @@ jobs:
       - name: 모으기
         env: { GENRES: '${{ github.event.inputs.genres }}' }
         run: |
-          node scripts/scene-mass.mjs --stage catalog --briefs 1 --places 6 --pages 2 ${GENRES:+--genres "$GENRES"}
+          node scripts/scene-mass.mjs --stage catalog --briefs 1 --places 6 --pages 3 --cap 4000 ${GENRES:+--genres "$GENRES"}
           node -e "console.log('후보', require('./work/candidates.json').length)"
       - uses: actions/upload-artifact@v4
         with: { name: cands, path: work/candidates.json }
@@ -51,7 +51,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -110,7 +110,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
