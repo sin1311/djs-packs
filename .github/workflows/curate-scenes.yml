@@ -91,6 +91,7 @@ jobs:
         if: ${{ github.event.inputs.apply == 'true' }}
         env: { CUT: '${{ github.event.inputs.cut }}', MIN_KEEP: '${{ github.event.inputs.min_keep }}' }
         run: |
+          mkdir -p now && curl -fsL "https://raw.githubusercontent.com/${{ github.repository }}/scenes/index.json?t=$(date +%s)" -o now/index.json && cp now/index.json prev/index.json # 반영하는 순간의 목록 (회차 4: 채점 사이에 합쳐진 브리프 사진을 옛 목록으로 덮어썼어요)
           node scripts/scene-mass.mjs --stage apply --existing prev/index.json --curation review/curation.json --out out/index.json ${CUT:+--cut "$CUT"}
           node -e "const a=require('./prev/index.json'),b=require('./out/index.json');const n=a.scenes.length,m=b.scenes.length;console.log('장면',n,'→',m,'· 컷',(a.shots||[]).length,'→',(b.shots||[]).length);if(m<+(process.env.MIN_KEEP||60)){console.error('남은 장면이 너무 적어요 — 기준값을 확인하세요. 올리지 않아요');process.exit(1)}"
           git clone -q --depth 1 -b scenes "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" site
