@@ -85,7 +85,7 @@ export function scoreScene(v, T, prompts = ALL_PROMPTS()) {
 export const CUT = { rej: 0.12, appeal: 0.55, genreMass: 0.25 }
 export function verdict(sc, cut = CUT) {
   if (sc.rej >= cut.rej) return { ok: false, why: '불쾌 · 이상: ' + sc.rejK }
-  if (sc.appeal < cut.appeal) return { ok: false, why: '평범 · 지루함' }
+  if (sc.appeal < cut.appeal && !(cut.gmAlt != null && sc.genreMass >= cut.gmAlt)) return { ok: false, why: '평범 · 지루함' } /* gmAlt: 거리에서 찍은 사진이라 "평범" 쪽으로 기울어도 장르 분위기가 아주 강하면(밤 쇼핑 거리 · 네온) 살려요 */
   if (sc.genreMass < cut.genreMass) return { ok: false, why: '어느 장르 분위기와도 멀어요' }
   return { ok: true, why: '' }
 }
