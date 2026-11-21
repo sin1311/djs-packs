@@ -1,0 +1,111 @@
+# 장르 브리프 사진 (2026-11-21): Actions 탭 → brief-shots → Run workflow
+#  사용자: "노래에 맞는 도시에 가거나 활동을 한다고 생각해 봐 — 캐롤 = 유럽 크리스마스 마켓, 힙합 = 뉴욕 어두운 밤 골목, 시티팝 = 노을 진 대도시 · 올드카 안 …
+#           멋짐 · 낭만 · 추억 같은 좋은 감정 · 불쾌하거나 이상한 사진은 빼고"
+#  src/scene/briefs.js 의 장르마다 사진 검색어(+ 명소)로 보통 사진을 모아요 (Openverse · 위키미디어 공용 · CC0/PDM/CC BY/CC BY-SA 만)
+#  → 품질 관문 → CLIP 채점(감성 · 불쾌 거절 · 그 장르가 상위 3 안) → 장르마다 상위 per 장 → 얼굴 · 번호판 흐림 · 깊이(2.5D) → Hugging Face 에 올리고
+#  → 지금 목록(scenes 가지 index.json)의 컷에 더해요 (장면마다 g = 장르 적합도 · ap = 감성). 앱은 장르에 맞는 360° 장면이 모자라면 이 사진들로 "사진 세계"를 틀어요.
+name: brief-shots
+on:
+  workflow_dispatch:
+    inputs:
+      genres: { description: '장르 (쉼표로 · 비우면 14개 모두)', default: '' }
+      per: { description: '장르마다 고를 사진 수', default: '30' }
+      hf_repo: { description: 'Hugging Face 데이터셋', default: '9birth/djs-scenes' }
+permissions:
+  contents: write
+concurrency:
+  group: scenes-index
+  cancel-in-progress: false
+env:
+  SHARDS: 6
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: 도구
+        run: |
+          npm init -y > /dev/null
+          ONNXRUNTIME_NODE_INSTALL_CUDA=skip npm i sharp@0.33.5 onnxruntime-node@1.20.1 @huggingface/transformers@3.1.2
+      - name: 지금 목록
+        run: |
+          mkdir -p prev && curl -fsL https://raw.githubusercontent.com/${{ github.repository }}/scenes/index.json -o prev/index.json
+          node -e "const x=require('./prev/index.json');console.log('장면',x.scenes.length,'· 컷',(x.shots||[]).length)"
+      - name: 모으기 · 관문 · 브리프 채점 · 고르기
+        env: { GENRES: '${{ github.event.inputs.genres }}' }
+        run: |
+          node scripts/scene-mass.mjs --stage catalog --briefs 1 ${GENRES:+--genres "$GENRES"}
+          node scripts/scene-mass.mjs --stage gate --clip --conc 8
+          node scripts/scene-mass.mjs --stage brief-score --conc 3
+          node scripts/scene-mass.mjs --stage curate --briefs 1 --per "${{ github.event.inputs.per }}" --existing prev/index.json
+          node -e "console.log('고른 사진', require('./work/selected.json').length)"
+      - uses: actions/upload-artifact@v4
+        with: { name: work, path: work/ }
+  build:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: actions/download-artifact@v4
+        with: { name: work, path: work/ }
+      - name: 도구 · 모델 (Depth Anything V2 Small = Apache-2.0 · YuNet = MIT · SFace = Apache-2.0)
+        run: |
+          npm init -y > /dev/null
+          ONNXRUNTIME_NODE_INSTALL_CUDA=skip npm i sharp@0.33.5 onnxruntime-node@1.20.1
+          mkdir -p models
+          curl -fL -o models/dav2s.onnx https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/main/onnx/model.onnx
+          curl -fL -o models/yunet.onnx https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx
+          curl -fL -o models/sface.onnx https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx
+      - name: 사진 만들기 (조각 ${{ matrix.shard }})
+        run: node scripts/scene-mass.mjs --stage build --shard ${{ matrix.shard }}/$SHARDS --out out/brief-r${{ github.run_number }}-${{ matrix.shard }} --depth models/dav2s.onnx --face models/yunet.onnx --sface models/sface.onnx
+      - name: Hugging Face 에 올리기
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          D=out/brief-r${{ github.run_number }}-${{ matrix.shard }}; B=$(basename $D)
+          if [ -z "$HF_TOKEN" ]; then echo "HF_TOKEN 비밀값이 없어요"; exit 1; fi
+          python3 -m pip install -q -U huggingface_hub
+          HF_REPO="${{ github.event.inputs.hf_repo }}" D="$D" B="$B" python3 - <<'PY'
+          import os, time
+          from huggingface_hub import HfApi
+          api, ok = HfApi(token=os.environ['HF_TOKEN']), False
+          for k in range(5):
+              try:
+                  api.upload_folder(repo_id=os.environ['HF_REPO'], repo_type='dataset', folder_path=os.environ['D'], path_in_repo=os.environ['B'], commit_message='브리프 사진 ' + os.environ['B'])
+                  ok = True; print('올리기 완료:', os.environ['B']); break
+              except Exception as e:
+                  print('올리기 다시', k + 1, str(e)[:200]); time.sleep(20 * (k + 1))
+          if not ok: raise SystemExit('Hugging Face 올리기 실패: ' + os.environ['B'])
+          PY
+          mkdir -p parts/$B && cp $D/part.json parts/$B/part.json
+      - uses: actions/upload-artifact@v4
+        with: { name: 'part-${{ matrix.shard }}', path: parts/ }
+  merge:
+    needs: build
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: actions/download-artifact@v4
+        with: { pattern: 'part-*', path: out/, merge-multiple: true }
+      - name: 지금 목록에 더하기 · scenes 가지에 올리기
+        run: |
+          mkdir -p prev && curl -fsL https://raw.githubusercontent.com/${{ github.repository }}/scenes/index.json -o prev/index.json # 합치는 순간의 목록 (그 사이 큐레이션 반영이 있었어도)
+          node scripts/scene-mass.mjs --stage merge --partsDir out --existing prev/index.json --base-hf "${{ github.event.inputs.hf_repo }}" --out out/scenes
+          node -e "const a=require('./prev/index.json'),b=require('./out/scenes/index.json');console.log('장면',a.scenes.length,'→',b.scenes.length,'· 컷',(a.shots||[]).length,'→',b.shots.length,'· 하늘',b.skies.length);if(b.scenes.length<a.scenes.length||b.shots.length<(a.shots||[]).length||b.skies.length<(a.skies||[]).length){console.error('목록이 줄었어요 — 올리지 않아요');process.exit(1)}"
+          git config --global user.name 'github-actions[bot]'; git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git clone -q --depth 1 -b scenes "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" site
+          cp out/scenes/index.json site/index.json
+          (cd site && git add -A && git commit -q -m "장르 브리프 사진 (회차 ${{ github.run_number }})" && for k in 1 2 3 4; do git push origin scenes && break; sleep $((k * 15)); git pull -q --rebase origin scenes; done)

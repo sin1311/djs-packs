@@ -68,6 +68,8 @@ export const REJECT = [
   ['감옥', 'a prison or jail'], ['성당 안 · 제단', 'a church interior with an altar'], ['사무실', 'an office with desks and cubicles'], ['빈 촬영 스튜디오', 'an empty white photo studio'],
   ['어둡고 흐림', 'a very dark blurry low quality photo'], ['좁은 복도', 'a narrow empty corridor'], ['주유소 · 차고', 'a gas station or garage'], ['동굴 · 지하', 'a dark cave or underground tunnel'],
   ['군사', 'military vehicles or weapons'], ['으스스함', 'a creepy scary place'], ['사람 얼굴 가까이', 'a close up of people faces'], ['주차장', 'a multi storey car park'],
+  /* 1차 검토 시트(2026-11-21)에서 찾은 것: 렌즈에 맺힌 물방울 · 찍는 사람 뒤통수 · 아이 · 우주에서 본 지도 · 텅 빈 연회장 */
+  ['렌즈 물방울', 'a blurry photo with water drops on the camera lens'], ['찍는 사람 머리', 'the back of a person head blocking the camera view'], ['어린이', 'a young child or little kids'], ['위성 지도', 'a satellite map of the earth from space'], ['빈 연회장', 'an empty banquet hall'],
 ]
 export const ALL_PROMPTS = () => { const out = []; for (const [g, b] of Object.entries(BRIEFS)) for (const p of b.prompts) out.push(['g:' + g, p]); for (const p of APPEAL) out.push(['appeal', p]); for (const p of PLAIN) out.push(['plain', p]); for (const [k, p] of REJECT) out.push(['rej:' + k, p]); return out }
 

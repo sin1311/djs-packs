@@ -50,6 +50,7 @@ async function clipScorer() {
 }
 
 async function catalog() {
+  if (A.briefs) return briefCatalog()
   if (A.fixture) { const fx = await rd(A.fixture, []); log('시험 후보 (오프라인):', fx.length); await wr(join(WORK, 'candidates.json'), fx.map((c) => ({ ...c, pack: checkLicense(c).pack, L: checkLicense(c).L })).filter((c) => c.pack)); return }
   const target = +(A.target || 5000), gapsPrev = A.gaps ? (await rd(A.gaps, { terms: [] })).terms || [] : [], terms = [...new Set([...gapsPrev, ...String(A.terms || 'city street|night city|old town|harbor|beach|forest|mountain|snow|market|square|station|park|industrial|interior|church|bridge|river|desert|rooftop|neon|festival').split('|')])], all = [] /* --gaps: 지난번 빈 칸 검색어를 앞에 */
   if (gapsPrev.length) log('지난번 빈 칸 검색어:', gapsPrev.join(' · '))
@@ -77,7 +78,35 @@ async function gateStage() {
     log('수평 · 가짜 360°:', P.length, '장 잼 · 기울기(도) 중앙/90%/99%', q(P, (c) => c.pano.tilt), '· 바로잡음', P.filter((c) => c.pano.level).length, '· 세로선 비율', q(P, (c) => c.pano.conf), '· 직선 맞춤', q(P, (c) => c.pano.manh), '· 가짜로 뺌', P.filter((c) => (c.why || []).some((w) => /가짜 360/.test(w))).length) }
   for (const [k, b] of Object.entries(by)) log('관문 ·', k, `후보 ${b.n} · 받음 ${b.got} · 통과 ${b.pass}`, Object.keys(b.err).length ? '· 실패 ' + JSON.stringify(b.err) : '') /* 2회차: 출처별 숫자가 없어 위키미디어 전멸을 늦게 알았어요 */
 }
+/* 장르 브리프 컷 (2026-11-21 사용자: "노래에 맞는 도시에 가거나 활동을 한다고 생각해 봐"): 360° 가 아닌 보통 사진을 장르마다 브리프 검색어(+ 명소)로 모아
+   → 품질 관문(gate) → CLIP 브리프 채점(brief-score: 감성 · 불쾌 거절 · 그 장르가 상위 3 안) → 장르마다 상위 --per 장(curate --briefs) → 컷 만들기 · 합치기 */
+async function briefCatalog() {
+  const { BRIEFS } = await import('../src/scene/briefs.js'), only = A.genres ? String(A.genres).split(',') : Object.keys(BRIEFS), terms = {}
+  for (const g of only) { const b = BRIEFS[g]; if (b) terms[g] = [...b.shots, ...b.places.slice(0, +(A.places || 2)).map((pl) => `${b.shots[0].split(' ').slice(0, 2).join(' ')} ${pl}`)] }
+  const all = []; for (const [k, fn] of Object.entries(SHOT_SOURCES)) { try { const got = await fn(fetch, { terms }); log('브리프 컷', k, got.length, JSON.stringify(got.reduce((o, c) => ((o[c.sub] = (o[c.sub] || 0) + 1), o), {}))); all.push(...got) } catch (e) { log('브리프 컷', k, '실패 (건너뜀):', String(e.message || e).slice(0, 160)) } }
+  const seen = new Set(), ok = []; for (const c of all) { if (seen.has(c.id) || !c.url) continue; seen.add(c.id); const L = checkLicense(c); if (!L.ok) continue; c.pack = L.pack; c.L = L.L; c.genre = c.sub; ok.push(c) }
+  log('브리프 후보:', all.length, '→ 라이선스 통과', ok.length); await wr(join(WORK, 'candidates.json'), ok)
+}
+async function briefScoreStage() {
+  const { ALL_PROMPTS, scoreScene, verdict, CUT, packFit } = await import('../src/scene/briefs.js'), cut = { ...CUT, ...(A.cut ? JSON.parse(A.cut) : {}) }, all = await rd(join(WORK, 'scored.json'), [])
+  const M = A['fake-clip'] ? fakeClip() : await clipModels(), prompts = ALL_PROMPTS(), T = await M.text(prompts.map((p) => p[1])), S = await img(), list = all.filter((c) => c.kind === 'shot' && c.pass)
+  let n = 0, kept = 0; const why = {}
+  await pool(list, +(A.conc || 3), async (c) => {
+    const buf = await get(c.thumb || c.url), m = await S(buf).metadata(), w = 640, h = Math.max(2, Math.round(640 * (m.height || 360) / (m.width || 640))), { data } = await S(buf).resize(w, h, { fit: 'fill' }).removeAlpha().raw().toBuffer({ resolveWithObject: true })
+    const sc = scoreScene(await M.image(new Uint8Array(data), w, h, { flat: true }), T, prompts), v = verdict(sc, cut), g = c.genre || c.sub, rank = Object.entries(sc.fit).sort((a, b) => b[1] - a[1]).findIndex(([k]) => k === g)
+    const ok = v.ok && rank >= 0 && rank < 3 && (sc.fit[g] || 0) >= 0.12; c.cur = { ...sc, ok, why: ok ? '' : v.why || `장르(${g})와 덜 맞아요 (순위 ${rank + 1})` }; c.g = packFit(sc.fit); c.ap = Math.round(sc.appeal * 255); if (!ok) { c.pass = false; why[c.cur.why.split(':')[0]] = (why[c.cur.why.split(':')[0]] || 0) + 1 } else kept++
+    if (++n % 50 === 0) log(`브리프 채점 ${n}/${list.length} · 통과 ${kept}`)
+  })
+  log('브리프 채점 끝:', kept, '/', list.length, JSON.stringify(why)); await wr(join(WORK, 'scored.json'), all)
+}
 async function curateStage() {
+  if (A.briefs) { /* 장르마다 (그 장르 적합도 × 감성) 상위 --per 장, 이미 있는 컷 · 중복 빼고 */
+    const ex = A.existing ? await rd(A.existing, { scenes: [], shots: [] }) : { shots: [] }, have = new Set((ex.shots || []).map((x) => x.id)), all = dedupe((await rd(join(WORK, 'scored.json'), [])).filter((c) => c.kind === 'shot' && c.pass && c.cur && c.cur.ok && !have.has(c.id))), per = +(A.per || 30), out = [], byG = {}
+    for (const c of all) (byG[c.genre] = byG[c.genre] || []).push(c)
+    for (const [g, l] of Object.entries(byG)) { l.sort((a, b) => b.cur.fit[g] * b.cur.appeal - a.cur.fit[g] * a.cur.appeal); out.push(...l.slice(0, per)) }
+    log('브리프 컷 선별:', out.length, JSON.stringify(Object.fromEntries(Object.entries(byG).map(([g, l]) => [g, `${Math.min(per, l.length)}/${l.length}`]))))
+    await wr(join(WORK, 'selected.json'), out); await wr(join(WORK, 'gaps.json'), { gaps: [], terms: [] }); await wr(join(WORK, 'skies.json'), []); return
+  }
   const { unpack } = await import('../src/scene/descriptors.js'), all = await rd(join(WORK, 'scored.json'), [])
   const skies = all.filter((c) => c.sky && c.pass), places = dedupe(all.filter((c) => !c.sky && c.pass && c.kind !== 'shot')).map((c) => ({ ...c, d: unpack(c.desc) })), shotsAll = dedupe(all.filter((c) => c.kind === 'shot' && c.pass)).map((c) => ({ ...c, d: unpack(c.desc) }))
   const ex = A.existing ? await rd(A.existing, { scenes: [] }) : { scenes: [] }, have = new Set(ex.scenes.map((x) => x.id)), init = new Float32Array(N); for (const x of ex.scenes) { const q = unpack(x.desc); for (let i = 0; i < N; i++) init[i] += q[i] } /* 이어서 모으기: 이미 있는 장면이 채운 칸은 빼고 */
@@ -107,7 +136,8 @@ async function buildStage() {
     if (c.kind === 'shot') Object.assign(s, { kind: 'shot', sub: c.sub, theme: c.sub, name: `${top} · ${c.title}`.slice(0, 60) })
     try { const r = c.kind === 'shot' ? await F.buildShot(s) : await F.build(s); if (r) parts.push({ man: r.man, rep: r.rep, pack: c.pack }) } catch (e) { log('실패 (건너뜀):', c.id, String(e.message || e).slice(0, 160)) }
   }
-  await wr(join(out, 'part.json'), parts.map((p) => ({ id: p.man.id, name: p.man.name, kind: p.man.kind, ...(p.man.sub ? { sub: p.man.sub } : {}), label: p.man.label, theme: p.man.theme, desc: p.man.desc, stats: p.man.stats, review: p.man.review, pack: p.pack, manifest: p.man.id + '/manifest.json', sha: F.sha(JSON.stringify(p.man, null, 1)) })))
+  const gOf = new Map(mine.filter((c) => c.g).map((c) => [c.id, { g: c.g, ap: c.ap, genre: c.genre }])) /* 브리프 컷: 장르 적합도 · 감성을 목록까지 */
+  await wr(join(out, 'part.json'), parts.map((p) => ({ id: p.man.id, name: p.man.name, kind: p.man.kind, ...(p.man.sub ? { sub: p.man.sub } : {}), ...(gOf.get(p.man.id) || {}), label: p.man.label, theme: p.man.theme, desc: p.man.desc, stats: p.man.stats, review: p.man.review, pack: p.pack, manifest: p.man.id + '/manifest.json', sha: F.sha(JSON.stringify(p.man, null, 1)) })))
   log(`조각 ${i}/${n}:`, parts.length, '/', mine.length, '장면')
 }
 async function mergeStage() {
@@ -117,7 +147,8 @@ async function mergeStage() {
   if (A.existing) { const ex = await rd(A.existing, { scenes: [] }), have = new Set([...scenes, ...shots].map((x) => x.id)), rb = await rd(join(WORK, 'rebuild.json'), null)
     if (rb) { const drop = new Set([...rb.dropped.map((d) => d.id), ...rb.rebuild.filter((id) => !have.has(id))]); ex.scenes = ex.scenes.filter((x) => !drop.has(x.id)); log('다시 만들기: 새로 바꿈', rb.rebuild.filter((id) => have.has(id)).length, '곳 · 목록에서 뺌', drop.size, '곳 (새 관문 탈락', rb.dropped.length, '· 다시 만들기 실패', drop.size - rb.dropped.length, ')') } /* 실패(지면 · 흐림 많음 등)는 옛 장면도 빼요 — 새 기준에 못 미쳐요 */ for (const x of ex.scenes) if (!have.has(x.id)) scenes.push(x); for (const x of ex.shots || []) if (!have.has(x.id)) shots.push(x); log('기존 장면 합침:', ex.scenes.length, '· 컷', (ex.shots || []).length) } /* 이어서 모으기: 예전 장면 그대로 */
   const skiesBase = A['skies-base'] || ''
-  const index = { format: 'djs-scenes/1', ...(skiesBase ? { skiesBase } : {}), made: new Date().toISOString().slice(0, 10), count: scenes.length, scenes, shots, skies: await rd(join(dir, 'skies', 'skies.json'), []) }
+  const exI = A.existing ? await rd(A.existing, {}) : {}, skNew = await rd(join(dir, 'skies', 'skies.json'), null), sb = skiesBase || (!skNew && exI.skiesBase) || '' /* 브리프 컷만 합칠 땐 하늘이 없어요 → 지금 목록의 하늘 그대로 */
+  const index = { format: 'djs-scenes/1', ...(sb ? { skiesBase: sb } : {}), made: new Date().toISOString().slice(0, 10), count: scenes.length, scenes, shots, skies: skNew || exI.skies || [], ...(exI.curated ? { curated: exI.curated } : {}) }
   await wr(join(A.out || 'out/scenes', 'index.json'), index); log('합치기:', scenes.length, '장면 ·', shots.length, '컷 ·', index.skies.length, '하늘 →', join(A.out || 'out/scenes', 'index.json'))
 }
 // 하늘 도서관: 하늘 HDRI → 1024×512 WebP + SH 9계수(재조명) + 지평선 색 + 시간대 · 날씨 서술어
@@ -343,11 +374,11 @@ async function reviewStage() {
 }
 async function applyStage() {
   const { verdict, CUT, packFit } = await import('../src/scene/briefs.js'), cut = { ...CUT, ...(A.cut ? JSON.parse(A.cut) : {}) }, ix = await rd(A.existing, { scenes: [], shots: [] }), cur = await rd(A.curation, {})
-  const keep = (s) => { const c = cur[s.id]; if (!c) return s.kind === 'synthetic' ? s : null /* 채점 못 한 장면은 빼요 (안전) */; if (!verdict(c, cut).ok) return null; return { ...s, g: packFit(c.fit), ap: Math.round(c.appeal * 255) } }
+  const keep = (s) => { const c = cur[s.id]; if (!c) return s.kind === 'synthetic' || s.g ? s : null /* 채점 못 한 장면은 빼요 (안전) · 브리프 컷(만들 때 이미 채점 · g 있음)은 그대로 */; if (!verdict(c, cut).ok) return null; return { ...s, g: packFit(c.fit), ap: Math.round(c.appeal * 255) } }
   const scenes = ix.scenes.map(keep).filter(Boolean), shots = (ix.shots || []).map(keep).filter(Boolean)
   const out = { ...ix, made: new Date().toISOString().slice(0, 10), curated: { cut, at: new Date().toISOString(), from: ix.scenes.length + (ix.shots || []).length }, count: scenes.length, scenes, shots }
   await wr(A.out || 'out/scenes/index.json', out); log('반영:', ix.scenes.length, '→', scenes.length, '장면 ·', (ix.shots || []).length, '→', shots.length, '컷')
 }
-const ST = { 'ab-depth': abDepth, 'calib-level': calibLevel, 'synth-skies': synthSkies, 'synth-shots': synthShots, catalog, gate: gateStage, curate: curateStage, build: buildStage, merge: mergeStage, skies: skiesStage, rescore: rescoreStage, review: reviewStage, apply: applyStage }
+const ST = { 'ab-depth': abDepth, 'calib-level': calibLevel, 'synth-skies': synthSkies, 'synth-shots': synthShots, catalog, gate: gateStage, curate: curateStage, build: buildStage, merge: mergeStage, skies: skiesStage, rescore: rescoreStage, review: reviewStage, apply: applyStage, 'brief-score': briefScoreStage }
 for (const s of String(A.stage || 'catalog').split(',')) { if (!ST[s]) throw new Error('모르는 --stage ' + s); log('==', s); await ST[s]() }
 void isPano

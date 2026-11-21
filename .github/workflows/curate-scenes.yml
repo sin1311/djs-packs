@@ -17,7 +17,7 @@ permissions:
   contents: write
   actions: read
 concurrency:
-  group: curate-scenes
+  group: scenes-index
   cancel-in-progress: false
 jobs:
   prepare:
