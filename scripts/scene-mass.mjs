@@ -116,7 +116,7 @@ async function briefScoreStage() {
 async function briefPickStage() {
   const ex = A.existing ? await rd(A.existing, { scenes: [], shots: [] }) : { shots: [] }, have = new Set((ex.shots || []).map((x) => x.id)), all = []
   for (const f of await readdir(WORK)) if (/^bscored-\d+\.json$/.test(f)) all.push(...(await rd(join(WORK, f), [])))
-  const okAll = dedupe(all.filter((c) => c.pass && c.cur && c.cur.ok && !have.has(c.id))), per = +(A.per || 200), out = [], byG = {}
+  const dropped = A.drop ? new Set(Object.keys(await rd(A.drop, {})).filter((id) => !have.has(id))) : new Set() /* 큐레이션이 다 만든 사진을 다시 채점해 뺀 것 — 또 고르지 않아요 */, okAll = dedupe(all.filter((c) => c.pass && c.cur && c.cur.ok && !have.has(c.id) && !dropped.has(c.id))), per = +(A.per || 200), out = [], byG = {}
   const rankOf = (c, g) => c.cur.fit[g] * (Math.max(0, (c.cur.aes ?? 5) - 4)) * (c.cur.pro ?? 0.6) * (1 - (c.cur.close ?? 0.2))
   for (const c of okAll) (byG[c.genre] = byG[c.genre] || []).push(c)
   for (const [g, l] of Object.entries(byG)) { l.sort((a, b) => rankOf(b, g) - rankOf(a, g)); out.push(...l.slice(0, per)) }

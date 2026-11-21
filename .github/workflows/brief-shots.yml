@@ -93,7 +93,8 @@ jobs:
           if [ -n "$CUT" ]; then node -e "
           const fs=require('fs');(async()=>{const {verdict,CUT}=await import('./src/scene/briefs.js');const cut={...CUT,...JSON.parse(process.env.CUT)};
           for(const f of fs.readdirSync('work').filter(f=>/^bscored-\d+\.json$/.test(f))){const l=JSON.parse(fs.readFileSync('work/'+f));for(const c of l){if(!c.cur)continue;const g=c.genre,r=Object.entries(c.cur.fit).sort((a,b)=>b[1]-a[1]).findIndex(([k])=>k===g),v=verdict(c.cur,cut),gate=!/^품질 관문/.test(c.cur.why||'');const ok=gate&&v.ok&&r>=0&&r<3&&(c.cur.fit[g]||0)>=0.12;c.cur.ok=ok;c.pass=ok;c.cur.why=ok?'':(!gate?c.cur.why:(v.why||'장르와 덜 맞아요'))}fs.writeFileSync('work/'+f,JSON.stringify(l))}})()"; fi
-          node scripts/scene-mass.mjs --stage brief-pick --per "${{ github.event.inputs.per }}" --existing prev/index.json
+          curl -fsL "https://raw.githubusercontent.com/${{ github.repository }}/review-curate/curation.json?t=$(date +%s)" -o prev/dropped.json || echo "{}" > prev/dropped.json
+          node scripts/scene-mass.mjs --stage brief-pick --per "${{ github.event.inputs.per }}" --existing prev/index.json --drop prev/dropped.json
           node scripts/scene-mass.mjs --stage review --out review ${CUT:+--cut "$CUT"}
           node -e "const s=require('./review/summary.json');console.log(JSON.stringify(s).slice(0,1500))"
       - name: review 가지에 올리기
