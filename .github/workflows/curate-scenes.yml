@@ -27,7 +27,7 @@ jobs:
       - name: 지금 목록 받기
         run: |
           mkdir -p prev
-          curl -fsL https://raw.githubusercontent.com/${{ github.repository }}/scenes/index.json -o prev/index.json
+          curl -fsL "https://raw.githubusercontent.com/${{ github.repository }}/scenes/index.json?t=$(date +%s)" -o prev/index.json
           node -e "const x=require('./prev/index.json');console.log('장면',(x.scenes||[]).length,'· 컷',(x.shots||[]).length)"
           if [ "${{ github.event.inputs.reuse }}" = "true" ]; then curl -fsL https://raw.githubusercontent.com/${{ github.repository }}/review-curate/curation.json -o prev/curation.json && echo '지난 채점 사용'; fi
       - uses: actions/upload-artifact@v4
