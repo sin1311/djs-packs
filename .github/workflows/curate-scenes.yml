@@ -27,7 +27,7 @@ jobs:
       - name: 지금 목록 받기
         run: |
           mkdir -p prev
-          curl -fsL "https://raw.githubusercontent.com/${{ github.repository }}/scenes/index.json?t=$(date +%s)" -o prev/index.json
+          (rm -rf .scn && git clone -q --depth 1 -b scenes "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" .scn && cp .scn/index.json prev/index.json)
           node -e "const x=require('./prev/index.json');console.log('장면',(x.scenes||[]).length,'· 컷',(x.shots||[]).length)"
           if [ "${{ github.event.inputs.reuse }}" = "true" ]; then curl -fsL https://raw.githubusercontent.com/${{ github.repository }}/review-curate/curation.json -o prev/curation.json && echo '지난 채점 사용'; fi
       - uses: actions/upload-artifact@v4
@@ -91,7 +91,7 @@ jobs:
         if: ${{ github.event.inputs.apply == 'true' }}
         env: { CUT: '${{ github.event.inputs.cut }}', MIN_KEEP: '${{ github.event.inputs.min_keep }}' }
         run: |
-          mkdir -p now && curl -fsL "https://raw.githubusercontent.com/${{ github.repository }}/scenes/index.json?t=$(date +%s)" -o now/index.json && cp now/index.json prev/index.json # 반영하는 순간의 목록 (회차 4: 채점 사이에 합쳐진 브리프 사진을 옛 목록으로 덮어썼어요)
+          mkdir -p now && (rm -rf .scn && git clone -q --depth 1 -b scenes "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" .scn && cp .scn/index.json now/index.json) && cp now/index.json prev/index.json # 반영하는 순간의 목록 (회차 4: 채점 사이에 합쳐진 브리프 사진을 옛 목록으로 덮어썼어요)
           node scripts/scene-mass.mjs --stage apply --existing prev/index.json --curation review/curation.json --out out/index.json ${CUT:+--cut "$CUT"}
           node -e "const a=require('./prev/index.json'),b=require('./out/index.json');const n=a.scenes.length+(a.shots||[]).length,m=b.scenes.length+(b.shots||[]).length; /* 360° 장면 + 사진(컷) 모두 */console.log('장면',n,'→',m,'· 컷',(a.shots||[]).length,'→',(b.shots||[]).length);if(m<+(process.env.MIN_KEEP||60)){console.error('남은 장면이 너무 적어요 — 기준값을 확인하세요. 올리지 않아요');process.exit(1)}"
           git clone -q --depth 1 -b scenes "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" site

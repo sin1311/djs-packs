@@ -51,7 +51,7 @@ jobs:
         if: ${{ github.event.inputs.resume != 'false' }}
         run: |
           mkdir -p prev
-          curl -fsL https://raw.githubusercontent.com/${{ github.repository }}/scenes/index.json -o prev/index.json || echo '{"scenes":[]}' > prev/index.json
+          (rm -rf .scn && git clone -q --depth 1 -b scenes "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" .scn && cp .scn/index.json prev/index.json) || echo '{"scenes":[]}' > prev/index.json
           curl -fsL https://raw.githubusercontent.com/${{ github.repository }}/scenes/gaps.json -o prev/gaps.json || echo '{"terms":[]}' > prev/gaps.json
           node -e "const x=require('./prev/index.json');console.log('기존 장면',(x.scenes||[]).length)"
       - name: 수집 · 품질 관문 · 선별
@@ -148,7 +148,7 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          if [ ! -f prev/index.json ] && [ "${{ github.event.inputs.resume }}" != "false" ]; then mkdir -p prev; curl -fsL https://raw.githubusercontent.com/${{ github.repository }}/scenes/index.json -o prev/index.json || rm -f prev/index.json; fi # 이어서 모으기인데 prev 가 없으면 지금 목록을 직접 받아요
+          if [ ! -f prev/index.json ] && [ "${{ github.event.inputs.resume }}" != "false" ]; then mkdir -p prev; (rm -rf .scn && git clone -q --depth 1 -b scenes "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" .scn && cp .scn/index.json prev/index.json) || rm -f prev/index.json; fi # 이어서 모으기인데 prev 가 없으면 지금 목록을 직접 받아요
           EX=""; [ -f prev/index.json ] && EX="--existing prev/index.json"
           HF=""; [ -n "$HF_TOKEN" ] && [ -n "${{ github.event.inputs.hf_repo }}" ] && HF="--base-hf ${{ github.event.inputs.hf_repo }}"
           node scripts/scene-mass.mjs --stage merge --partsDir out $EX $HF --out out/scenes

@@ -89,7 +89,7 @@ jobs:
       - name: 다시 판정(from_run + cut) · 고르기 · 검토 시트
         env: { CUT: '${{ github.event.inputs.cut }}' }
         run: |
-          mkdir -p prev && curl -fsL "https://raw.githubusercontent.com/${{ github.repository }}/scenes/index.json?t=$(date +%s)" -o prev/index.json
+          mkdir -p prev && (rm -rf .scn && git clone -q --depth 1 -b scenes "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" .scn && cp .scn/index.json prev/index.json)
           if [ -n "$CUT" ]; then node -e "
           const fs=require('fs');(async()=>{const {verdict,CUT}=await import('./src/scene/briefs.js');const cut={...CUT,...JSON.parse(process.env.CUT)};
           for(const f of fs.readdirSync('work').filter(f=>/^bscored-\d+\.json$/.test(f))){const l=JSON.parse(fs.readFileSync('work/'+f));for(const c of l){if(!c.cur)continue;const g=c.genre,r=Object.entries(c.cur.fit).sort((a,b)=>b[1]-a[1]).findIndex(([k])=>k===g),v=verdict(c.cur,cut),gate=!/^품질 관문/.test(c.cur.why||'');const ok=gate&&v.ok&&r>=0&&r<3&&(c.cur.fit[g]||0)>=0.12;c.cur.ok=ok;c.pass=ok;c.cur.why=ok?'':(!gate?c.cur.why:(v.why||'장르와 덜 맞아요'))}fs.writeFileSync('work/'+f,JSON.stringify(l))}})()"; fi
@@ -163,7 +163,7 @@ jobs:
         with: { pattern: 'part-*', path: out/, merge-multiple: true }
       - name: 지금 목록에 더하기 · scenes 가지에 올리기
         run: |
-          mkdir -p prev && curl -fsL "https://raw.githubusercontent.com/${{ github.repository }}/scenes/index.json?t=$(date +%s)" -o prev/index.json # 합치는 순간의 목록
+          mkdir -p prev && (rm -rf .scn && git clone -q --depth 1 -b scenes "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" .scn && cp .scn/index.json prev/index.json) # 합치는 순간의 목록
           node scripts/scene-mass.mjs --stage merge --partsDir out --existing prev/index.json --base-hf "${{ github.event.inputs.hf_repo }}" --out out/scenes
           node -e "const a=require('./prev/index.json'),b=require('./out/scenes/index.json');console.log('장면',a.scenes.length,'→',b.scenes.length,'· 컷',(a.shots||[]).length,'→',b.shots.length,'· 하늘',b.skies.length);if(b.scenes.length<a.scenes.length||b.shots.length<(a.shots||[]).length||b.skies.length<(a.skies||[]).length){console.error('목록이 줄었어요 — 올리지 않아요');process.exit(1)}"
           git config --global user.name 'github-actions[bot]'; git config --global user.email 'github-actions[bot]@users.noreply.github.com'
