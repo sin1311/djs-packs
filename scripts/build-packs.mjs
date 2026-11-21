@@ -187,8 +187,11 @@ const pickEven = (arr, n) => { if (arr.length <= n) return arr; const o = []; fo
 // Virtuosity 파일 이름: Samples/<마이크>/<부품>/<마이크>_<주법>_vl<세기>[_rr<차례>].flac
 function vdZones(piece, art, mics) {
   const re = new RegExp(`^Samples/${mics[0][0]}/[a-z]+/${mics[0][0]}_${art}_vl(\\d+)(?:_rr(\\d+))?\\.flac$`), hits = list('vd').map((p) => { const m = re.exec(p); return m && { p, vl: +m[1], rr: +(m[2] || 1) } }).filter(Boolean)
-  const vls = pickEven([...new Set(hits.map((h) => h.vl))].sort((a, b) => a - b), Q.drum.L), rrs = [...new Set(hits.map((h) => h.rr))].sort((a, b) => a - b).slice(0, Q.drum.R)
-  const out = []; for (const h of hits) { if (!vls.includes(h.vl) || !rrs.includes(h.rr)) continue; out.push({ src: 'vd', drum: true, root: GM[piece], piece, layer: vls.indexOf(h.vl), rr: rrs.indexOf(h.rr), name: h.p.split('/').pop(), mix: mics.map(([m, w]) => ({ path: h.p.replace(new RegExp(`^Samples/${mics[0][0]}/`), `Samples/${m}/`).replace(new RegExp(`/${mics[0][0]}_`), `/${m}_`), w })) }) }
+  const allV = [...new Set(hits.map((h) => h.vl))].sort((a, b) => a - b), rrs = [...new Set(hits.map((h) => h.rr))].sort((a, b) => a - b).slice(0, Q.drum.R), mixOf = (h) => mics.map(([m, w]) => ({ path: h.p.replace(new RegExp(`^Samples/${mics[0][0]}/`), `Samples/${m}/`).replace(new RegExp(`/${mics[0][0]}_`), `/${m}_`), w }))
+  const out = [], push = (h, layer, rr) => out.push({ src: 'vd', drum: true, root: GM[piece], piece, layer, rr, name: h.p.split('/').pop(), mix: mixOf(h) })
+  if (rrs.length === 1 && allV.length >= Q.drum.L * 2) { /* 차례 녹음이 없고 세기만 아주 촘촘(스네어 36층 · 탐 16층): 세기 띠마다 가운데 이웃 세기 R 개를 차례로 — 진짜 다른 타격이라 기관총 소리가 없어요 */
+    const L = Q.drum.L, band = allV.length / L, R = Math.min(Q.drum.R, Math.floor(band)); for (let l = 0; l < L; l++) { const lo = Math.floor(l * band), hi = Math.floor((l + 1) * band) - 1, mid = l === L - 1 ? hi : Math.round((lo + hi) / 2); for (let r = 0; r < R; r++) { const v = allV[Math.max(lo, Math.min(hi, mid - r))], h = hits.find((x) => x.vl === v); if (h) push(h, l, r) } }
+  } else { const vls = pickEven(allV, Q.drum.L); for (const h of hits) { if (!vls.includes(h.vl) || !rrs.includes(h.rr)) continue; push(h, vls.indexOf(h.vl), rrs.indexOf(h.rr)) } }
   if (!out.length) throw new Error('Virtuosity 파일 없음: ' + art)
   return out
 }
