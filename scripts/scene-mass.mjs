@@ -407,7 +407,7 @@ async function reviewStage() {
 }
 async function applyStage() {
   const { verdict, CUT, packFit } = await import('../src/scene/briefs.js'), cut = { ...CUT, ...(A.cut ? JSON.parse(A.cut) : {}) }, ix = await rd(A.existing, { scenes: [], shots: [] }), cur = await rd(A.curation, {})
-  const keep = (s) => { const c = cur[s.id]; if (!c) return s.kind === 'synthetic' || s.g ? s : null /* 채점 못 한 장면은 빼요 (안전) · 브리프 컷(만들 때 이미 채점 · g 있음)은 그대로 */; if (!verdict(c, cut).ok) return null; return { ...s, g: packFit(c.fit), ap: Math.round(c.appeal * 255) } }
+  const keep = (s) => { const c = cur[s.id]; if (!c) { if (!(s.kind === 'synthetic' || s.g)) return null; const { stats, ...rest } = s; return rest } /* 채점 못 한 장면은 빼요 (안전) · 브리프 컷(만들 때 이미 채점 · g 있음)은 그대로 */; if (!verdict(c, cut).ok) return null; const { stats, ...rest } = s; return { ...rest, g: packFit(c.fit), ap: Math.round(c.appeal * 255) } } /* stats 는 앱이 안 써요(목록 2MB → 가볍게, 장면 매니페스트에 그대로) */
   const scenes = ix.scenes.map(keep).filter(Boolean), shots = (ix.shots || []).map(keep).filter(Boolean)
   const out = { ...ix, made: new Date().toISOString().slice(0, 10), curated: { cut, at: new Date().toISOString(), from: ix.scenes.length + (ix.shots || []).length }, count: scenes.length, scenes, shots }
   await wr(A.out || 'out/scenes/index.json', out); log('반영:', ix.scenes.length, '→', scenes.length, '장면 ·', (ix.shots || []).length, '→', shots.length, '컷')
