@@ -14,6 +14,7 @@ on:
       cut: { description: '판정 기준 덮어쓰기 JSON (예: {"aes":5.2,"pro":0.6,"close":0.35})', default: '' }
       stop_after_pick: { description: '검토 시트까지만 (만들기 · 합치기 안 함)', type: boolean, default: false }
       from_run: { description: '모으기 · 채점을 건너뛰고 이 실행(run id)의 채점을 다시 써요', default: '' }
+      ov: { description: 'Openverse 도 쓰기 (1) · 건너뛰기 (0 — 분당 제한으로 느려요)', default: '1' }
       hf_repo: { description: 'Hugging Face 데이터셋', default: '9birth/djs-scenes' }
 permissions:
   contents: write
@@ -37,9 +38,9 @@ jobs:
           npm init -y > /dev/null
           npm i sharp@0.33.5
       - name: 모으기
-        env: { GENRES: '${{ github.event.inputs.genres }}' }
+        env: { GENRES: '${{ github.event.inputs.genres }}', OV: '${{ github.event.inputs.ov }}' }
         run: |
-          node scripts/scene-mass.mjs --stage catalog --briefs 1 --places 6 --pages 3 --cap 4000 ${GENRES:+--genres "$GENRES"}
+          node scripts/scene-mass.mjs --stage catalog --briefs 1 --places 6 --pages 3 --cap 4000 ${OV:+--ov "$OV"} ${GENRES:+--genres "$GENRES"}
           node -e "console.log('후보', require('./work/candidates.json').length)"
       - uses: actions/upload-artifact@v4
         with: { name: cands, path: work/candidates.json }
