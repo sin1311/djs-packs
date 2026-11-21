@@ -272,6 +272,82 @@ async function abDepth() {
   for (const k of ['faces', 'panda']) log(`A/B ${k}: 지면 맞춤 중앙/90% ${med(k, 'inl')} · 이음매 비율 ${med(k, 'seam')} · 6° 수평 오차 ${med(k, 'err')} · 시간(ms) ${med(k, 'ms')} · 지면 맞춤 0.3 미만 ${out.filter((r) => r[k].inl < 0.3).length}/${out.length}`)
   await wr(join(WORK, 'ab-depth.json'), out)
 }
-const ST = { 'ab-depth': abDepth, 'calib-level': calibLevel, 'synth-skies': synthSkies, 'synth-shots': synthShots, catalog, gate: gateStage, curate: curateStage, build: buildStage, merge: mergeStage, skies: skiesStage }
+
+/* ===== 사진 큐레이션 (2026-11-21 사용자 지시) — 장르 브리프 · 감성 · 불쾌/이상 거절 (src/scene/briefs.js) =====
+   rescore: 이미 있는 장면(목록 + Hugging Face 파일)을 층 합성 → 원근 4장 CLIP → 감성 · 거절 · 장르 적합도 (--shard i/n 로 나눠요)
+   review : 조각들을 모아 검토 시트(장르별 상위 · 빠지는 것 · 경계) JPG + 요약 → 사람이 보고 기준(CUT)을 고쳐요
+   apply  : 판정을 목록에 반영 — 통과한 장면만, 장면마다 g(장르 적합도 상위 3) · ap(감성) */
+async function clipModels() {
+  const T = await import('@huggingface/transformers'), id = 'Xenova/clip-vit-base-patch32'
+  const tok = await T.AutoTokenizer.from_pretrained(id), proc = await T.AutoProcessor.from_pretrained(id), tm = await T.CLIPTextModelWithProjection.from_pretrained(id), vm = await T.CLIPVisionModelWithProjection.from_pretrained(id)
+  const norm = (v) => { const n = Math.hypot(...v) || 1; return v.map((x) => x / n) }
+  const one = async (rgb, W, H) => norm((await vm(await proc(new T.RawImage(new Uint8ClampedArray(rgb), W, H, 3)))).image_embeds.tolist()[0])
+  return {
+    text: async (list) => { const out = []; for (let i = 0; i < list.length; i += 32) out.push(...(await tm(tok(list.slice(i, i + 32), { padding: true, truncation: true }))).text_embeds.tolist().map(norm)); return out },
+    image: async (rgb, W, H, { flat } = {}) => { if (flat) return one(rgb, W, H); const es = []; for (const f of [0, 1, 4, 5]) es.push(await one(faceRGB(rgb, W, H, f, 224), 224, 224)); return norm(es[0].map((_, k) => es.reduce((a, e) => a + e[k], 0) / es.length)) },
+  }
+}
+function fakeClip() { /* 오프라인 시험용 (모델 없이 흐름만): 글 · 그림을 고정 난수 벡터로 */
+  const vec = (seed) => { let x = seed | 0; const v = []; for (let i = 0; i < 64; i++) { x = (x * 1103515245 + 12345) & 0x7fffffff; v.push(x / 0x7fffffff - 0.5) } const n = Math.hypot(...v); return v.map((y) => y / n) }
+  const h = (t) => { let a = 7; for (const c of String(t)) a = (a * 31 + c.charCodeAt(0)) | 0; return a }
+  return { text: async (l) => l.map((t) => vec(h(t))), image: async (rgb) => vec(rgb[0] * 7919 + rgb[rgb.length >> 1] * 31 + rgb.length) }
+}
+const baseOf = (s) => s.base || `https://raw.githubusercontent.com/sin1311/djs-packs/${s.ref || 'scenes'}/`
+async function sceneRGB(s, W = 1024, H = 512) { /* 층을 앱과 같은 순서(먼 층 → 가까운 층)로 겹쳐요 */
+  const S = await img(), b = baseOf(s), dir = s.manifest.replace(/manifest\.json$/, ''), man = JSON.parse(String(await get(b + s.manifest)))
+  if (s.kind === 'shot' || man.format === 'djs-shot/1') { const buf = await get(b + dir + man.color), m = await S(buf).metadata(), w = 640, h = Math.max(2, Math.round(640 * (m.height || 360) / (m.width || 640))), { data, info } = await S(buf).resize(w, h, { fit: 'fill' }).removeAlpha().raw().toBuffer({ resolveWithObject: true }); if (info.channels !== 3) throw new Error('채널 ' + info.channels); return { rgb: new Uint8Array(data), W: w, H: h, flat: true } }
+  const bufs = []; for (const L of man.layers) bufs.push(await get(b + dir + L.color))
+  const over = []; for (const x of bufs.slice(1)) over.push({ input: await S(x).resize(W, H, { fit: 'fill' }).ensureAlpha().png().toBuffer() })
+  const png = await S(bufs[0]).resize(W, H, { fit: 'fill' }).ensureAlpha().composite(over).png().toBuffer() /* sharp 은 composite 를 맨 끝에 해서 알파 빼기는 다음 단계에서 */
+  const { data, info } = await S(png).removeAlpha().raw().toBuffer({ resolveWithObject: true }); if (info.channels !== 3) throw new Error('채널 ' + info.channels); return { rgb: new Uint8Array(data), W, H, flat: false }
+}
+async function rescoreStage() {
+  const { ALL_PROMPTS, scoreScene, verdict } = await import('../src/scene/briefs.js'), ix = await rd(A.existing, { scenes: [], shots: [] })
+  const items = [...ix.scenes.filter((s) => s.kind !== 'synthetic'), ...(ix.shots || []).map((s) => ({ ...s, kind: 'shot' }))], [si, sn] = String(A.shard || '0/1').split('/').map(Number), mine = items.filter((_, i) => i % sn === si)
+  const M = A['fake-clip'] ? fakeClip() : await clipModels(), prompts = ALL_PROMPTS(), T = await M.text(prompts.map((p) => p[1])), out = {}, S = await img(), td = join(WORK, 'thumbs'); await mkdir(td, { recursive: true })
+  let n = 0; const t0 = Date.now()
+  await pool(mine, +(A.conc || 3), async (s) => {
+    const r = await sceneRGB(s), emb = await M.image(r.rgb, r.W, r.H, { flat: r.flat }), sc = scoreScene(emb, T, prompts), v = verdict(sc)
+    out[s.id] = { ...sc, ok: v.ok, why: v.why, shot: s.kind === 'shot', name: s.name, theme: s.theme }
+    const th = r.flat ? S(Buffer.from(r.rgb), { raw: { width: r.W, height: r.H, channels: 3 } }).resize(320, 180, { fit: 'cover' }) : S(Buffer.from(r.rgb), { raw: { width: r.W, height: r.H, channels: 3 } }).extract({ left: Math.round(r.W * 0.25), top: Math.round(r.H * 0.3), width: Math.round(r.W * 0.5), height: Math.round(r.H * 0.36) }).resize(320, 180, { fit: 'fill' })
+    await th.jpeg({ quality: 70 }).toFile(join(td, s.id + '.jpg'))
+    if (++n % 50 === 0) log(`채점 ${n}/${mine.length} · ${((Date.now() - t0) / n / 1000).toFixed(2)}초/장`)
+  })
+  const errs = mine.filter((s) => s._err); log('채점 끝:', Object.keys(out).length, '/', mine.length, errs.length ? '· 실패 ' + errs.length + ' 예: ' + errs[0]._err : '')
+  await wr(join(WORK, `curation-${si}.json`), out)
+}
+const esc = (t) => String(t).replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[c]).replace(/[^\x20-\x7e]/g, '')
+async function sheet(file, list, label) { /* 검토 시트: 6열 썸네일 + 글자(영문 · 숫자) */
+  const S = await img(), cols = 6, cw = 320, chh = 210, rows = Math.max(1, Math.ceil(list.length / cols)), comps = []
+  for (let i = 0; i < list.length; i++) { const x = (i % cols) * cw, y = (i / cols | 0) * chh, e = list[i], f = join(WORK, 'thumbs', e.id + '.jpg'); try { comps.push({ input: await S(f).toBuffer(), left: x, top: y }) } catch (er) { /* 썸네일 없음 */ }
+    comps.push({ input: Buffer.from(`<svg width="${cw}" height="30"><rect width="100%" height="100%" fill="black"/><text x="4" y="13" font-size="11" fill="white" font-family="sans-serif">${esc(label(e)).slice(0, 52)}</text><text x="4" y="27" font-size="10" fill="#ffd27a" font-family="sans-serif">${esc(e.id).slice(0, 50)}</text></svg>`), left: x, top: y + 180 }) }
+  await S({ create: { width: cols * cw, height: rows * chh, channels: 3, background: '#111' } }).composite(comps).jpeg({ quality: 72 }).toFile(file)
+}
+async function reviewStage() {
+  const { GENRES, verdict, CUT } = await import('../src/scene/briefs.js'), cut = { ...CUT, ...(A.cut ? JSON.parse(A.cut) : {}) }, all = {}
+  for (const f of await readdir(WORK)) if (/^curation-\d+\.json$/.test(f)) Object.assign(all, await rd(join(WORK, f), {}))
+  const E = Object.entries(all).map(([id, x]) => { const v = verdict(x, cut); return { id, ...x, ok: v.ok, why: v.why } }), out = A.out || 'out/review'; await mkdir(out, { recursive: true })
+  const ok = E.filter((e) => e.ok), bad = E.filter((e) => !e.ok), why = {}; for (const e of bad) why[e.why] = (why[e.why] || 0) + 1
+  const perG = Object.fromEntries(GENRES.map((g) => [g, ok.filter((e) => !e.shot && e.best === g).length])), perGshot = Object.fromEntries(GENRES.map((g) => [g, ok.filter((e) => e.shot && e.best === g).length]))
+  const q = (a, f) => { const v = a.map(f).sort((x, y) => x - y); return v.length ? [0.1, 0.5, 0.9].map((p) => v[Math.floor((v.length - 1) * p)].toFixed(2)).join('/') : '-' }
+  const sum = { cut, total: E.length, ok: ok.length, rejected: bad.length, why, perGenre: perG, perGenreShots: perGshot, appeal: q(E, (e) => e.appeal), rej: q(E, (e) => e.rej), genreMass: q(E, (e) => e.genreMass) }
+  log('검토:', JSON.stringify(sum)); await wr(join(out, 'summary.json'), sum)
+  const lab = (e) => `${e.ok ? 'OK' : 'NO'} ap${e.appeal.toFixed(2)} rj${e.rej.toFixed(2)} gm${e.genreMass.toFixed(2)} ${e.best}${e.ok ? '' : ' ' + (e.rejK || '')}`
+  for (const g of GENRES) { const top = ok.filter((e) => !e.shot).sort((a, b) => b.fit[g] * b.appeal - a.fit[g] * a.appeal).slice(0, 24); await sheet(join(out, `genre-${g}.jpg`), top, (e) => `${g} ${(e.fit[g] * 100).toFixed(0)}% ` + lab(e)) }
+  const shuffle = (a, seed = 7) => { let s = seed; return a.map((x) => [x, (s = (s * 1103515245 + 12345) & 0x7fffffff)]).sort((x, y) => x[1] - y[1]).map((x) => x[0]) }
+  await sheet(join(out, 'rejected-sample.jpg'), shuffle(bad.filter((e) => !e.shot)).slice(0, 48), lab)
+  await sheet(join(out, 'kept-lowest-appeal.jpg'), ok.filter((e) => !e.shot).sort((a, b) => a.appeal - b.appeal).slice(0, 36), lab)
+  await sheet(join(out, 'kept-random.jpg'), shuffle(ok.filter((e) => !e.shot), 11).slice(0, 48), lab)
+  await sheet(join(out, 'shots-kept.jpg'), shuffle(ok.filter((e) => e.shot), 3).slice(0, 36), lab); await sheet(join(out, 'shots-rejected.jpg'), shuffle(bad.filter((e) => e.shot), 5).slice(0, 36), lab)
+  await wr(join(out, 'curation.json'), all)
+}
+async function applyStage() {
+  const { verdict, CUT, packFit } = await import('../src/scene/briefs.js'), cut = { ...CUT, ...(A.cut ? JSON.parse(A.cut) : {}) }, ix = await rd(A.existing, { scenes: [], shots: [] }), cur = await rd(A.curation, {})
+  const keep = (s) => { const c = cur[s.id]; if (!c) return s.kind === 'synthetic' ? s : null /* 채점 못 한 장면은 빼요 (안전) */; if (!verdict(c, cut).ok) return null; return { ...s, g: packFit(c.fit), ap: Math.round(c.appeal * 255) } }
+  const scenes = ix.scenes.map(keep).filter(Boolean), shots = (ix.shots || []).map(keep).filter(Boolean)
+  const out = { ...ix, made: new Date().toISOString().slice(0, 10), curated: { cut, at: new Date().toISOString(), from: ix.scenes.length + (ix.shots || []).length }, count: scenes.length, scenes, shots }
+  await wr(A.out || 'out/scenes/index.json', out); log('반영:', ix.scenes.length, '→', scenes.length, '장면 ·', (ix.shots || []).length, '→', shots.length, '컷')
+}
+const ST = { 'ab-depth': abDepth, 'calib-level': calibLevel, 'synth-skies': synthSkies, 'synth-shots': synthShots, catalog, gate: gateStage, curate: curateStage, build: buildStage, merge: mergeStage, skies: skiesStage, rescore: rescoreStage, review: reviewStage, apply: applyStage }
 for (const s of String(A.stage || 'catalog').split(',')) { if (!ST[s]) throw new Error('모르는 --stage ' + s); log('==', s); await ST[s]() }
 void isPano

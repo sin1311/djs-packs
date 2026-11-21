@@ -1,0 +1,93 @@
+# 사진 장면 큐레이션 (2026-11-21): Actions 탭 → curate-scenes → Run workflow
+#  지금 목록(scenes 가지 index.json)의 장면 · 인서트 컷을 CLIP(ViT-B/32 · MIT)으로 다시 채점해요 — src/scene/briefs.js
+#   · 장르 브리프(캐롤 = 크리스마스 마켓, 힙합 = 뉴욕 밤 골목, 시티팝 = 노을 진 대도시 · 올드카 …)에 얼마나 맞는지
+#   · 감성(멋짐 · 낭만 · 추억) vs 평범 · 지루함
+#   · 불쾌 · 이상한 느낌(묘지 · 뼈 표본 · 폐공장 낙서 · 황무지 사막 · 쓰레기 …)
+#  → 검토 시트(장르별 상위 · 빠진 것 · 남은 것 중 감성 낮은 것)를 review 가지에 올려요 (사람이 보고 기준값을 고쳐요).
+#  → apply 를 켜면 통과한 장면만 남긴 목록(장면마다 g = 장르 적합도 · ap = 감성)을 scenes 가지에 올려요 (하늘 · 빈 칸 보고서는 그대로).
+name: curate-scenes
+on:
+  workflow_dispatch:
+    inputs:
+      cut: { description: '판정 기준 덮어쓰기 JSON (예: {"rej":0.15,"appeal":0.5}) · 비우면 briefs.js 기본값', default: '' }
+      apply: { description: '통과한 장면만 남긴 목록을 scenes 가지에 반영', type: boolean, default: false }
+      reuse: { description: '다시 채점하지 않고 지난 실행의 채점(review 가지 curation.json)으로 판정만 다시', type: boolean, default: false }
+permissions:
+  contents: write
+concurrency:
+  group: curate-scenes
+  cancel-in-progress: false
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 지금 목록 받기
+        run: |
+          mkdir -p prev
+          curl -fsL https://raw.githubusercontent.com/${{ github.repository }}/scenes/index.json -o prev/index.json
+          node -e "const x=require('./prev/index.json');console.log('장면',(x.scenes||[]).length,'· 컷',(x.shots||[]).length)"
+          if [ "${{ github.event.inputs.reuse }}" = "true" ]; then curl -fsL https://raw.githubusercontent.com/${{ github.repository }}/review/curation.json -o prev/curation.json && echo '지난 채점 사용'; fi
+      - uses: actions/upload-artifact@v4
+        with: { name: prev, path: prev/ }
+  rescore:
+    needs: prepare
+    if: ${{ github.event.inputs.reuse != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: actions/download-artifact@v4
+        with: { name: prev, path: prev/ }
+      - name: 도구 (sharp · onnxruntime-node · transformers)
+        run: |
+          npm init -y > /dev/null
+          ONNXRUNTIME_NODE_INSTALL_CUDA=skip npm i sharp@0.33.5 onnxruntime-node@1.20.1 @huggingface/transformers@3.1.2
+      - name: 채점 (조각 ${{ matrix.shard }}/10)
+        run: node scripts/scene-mass.mjs --stage rescore --existing prev/index.json --shard ${{ matrix.shard }}/10 --conc 3 --work work
+      - uses: actions/upload-artifact@v4
+        with: { name: 'cur-${{ matrix.shard }}', path: work/ }
+  review:
+    needs: [prepare, rescore]
+    if: ${{ always() && needs.prepare.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: actions/download-artifact@v4
+        with: { name: prev, path: prev/ }
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with: { pattern: 'cur-*', path: work/, merge-multiple: true }
+      - name: 도구
+        run: |
+          npm init -y > /dev/null
+          npm i sharp@0.33.5
+      - name: 검토 시트
+        env: { CUT: '${{ github.event.inputs.cut }}' }
+        run: |
+          if [ -f prev/curation.json ] && [ ! -f work/curation-0.json ]; then mkdir -p work && cp prev/curation.json work/curation-0.json; fi
+          node scripts/scene-mass.mjs --stage review --work work --out review ${CUT:+--cut "$CUT"}
+          ls -la review
+      - name: review 가지에 올리기 (검토 시트 · 채점)
+        run: |
+          git config --global user.name 'github-actions[bot]'; git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          printf '# 장면 큐레이션 검토 (회차 %s)\n\nsummary.json = 통과 · 탈락 수 · 이유 · 장르별 수. genre-*.jpg = 장르별 상위 24. rejected-sample.jpg = 빠진 것. kept-lowest-appeal.jpg = 남은 것 중 감성 낮은 것.\n' "${{ github.run_number }}" > review/README.md
+          (cd review && git init -q -b review && git add -A && git commit -q -m "큐레이션 검토 (회차 ${{ github.run_number }})" && for k in 1 2 3 4; do git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" review && break; sleep $((k * 15)); done)
+      - name: scenes 가지에 반영 (apply)
+        if: ${{ github.event.inputs.apply == 'true' }}
+        env: { CUT: '${{ github.event.inputs.cut }}' }
+        run: |
+          node scripts/scene-mass.mjs --stage apply --existing prev/index.json --curation review/curation.json --out out/index.json ${CUT:+--cut "$CUT"}
+          node -e "const a=require('./prev/index.json'),b=require('./out/index.json');const n=a.scenes.length,m=b.scenes.length;console.log('장면',n,'→',m,'· 컷',(a.shots||[]).length,'→',(b.shots||[]).length);if(m<Math.max(60,n*0.08)){console.error('남은 장면이 너무 적어요 — 기준값을 확인하세요. 올리지 않아요');process.exit(1)}"
+          git clone -q --depth 1 -b scenes "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" site
+          [ -f site/index.pre-curation.json ] || cp prev/index.json site/index.pre-curation.json # 처음 반영할 때의 원래 목록을 되돌리기용으로 남겨요
+          cp out/index.json site/index.json
+          git config --global user.name 'github-actions[bot]'; git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          (cd site && git add -A && git commit -q -m "장면 큐레이션 반영 (회차 ${{ github.run_number }})" && for k in 1 2 3 4; do git push origin scenes && break; sleep $((k * 15)); git pull -q --rebase origin scenes; done)
