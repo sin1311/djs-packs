@@ -22,12 +22,13 @@ const SRC = process.env.PACK_SRC || join(ROOT, '.cache/pack-src')
 const REPOS = {
   vsco: { url: 'https://github.com/sgossner/VSCO-2-CE', license: 'CC0-1.0', author: 'Versilian Studios (Sam Gossner · Simon Dalzell 외)', source: 'GitHub sgossner/VSCO-2-CE' },
   sal: { url: 'https://github.com/sfzinstruments/SalamanderGrandPiano', license: 'CC-BY-3.0', author: 'Alexander Holm', source: 'GitHub sfzinstruments/SalamanderGrandPiano (원본 archive.org SalamanderGrandPianoV3)' },
+  vd: { url: 'https://github.com/sfzinstruments/virtuosity_drums', license: 'CC0-1.0', author: 'Versilian Studios (Virtuosity Drums · 연주 Austin McMahon)', source: 'GitHub sfzinstruments/virtuosity_drums' }, /* 2단계: 드럼 멀티샘플 (LICENSE = CC0 1.0 확인) */
 }
 // 등급별 설정: 세기 레이어 수 · 길이 상한(초) · 비트레이트(kbps)
 const Q = {
-  lite: { pianoLayers: [4, 8, 12, 16], cap: 1, kbps: { 1: 48, 2: 64 }, relEvery: 3 }, /* v1.0-B.3: 40/56 → 48/64 kbps (10MB 안에서 조금 더 맑게) */
-  standard: { pianoLayers: [2, 5, 8, 11, 14, 16], cap: 1.6, kbps: { 1: 64, 2: 96 }, relEvery: 1 },
-  full: { pianoLayers: [1, 3, 5, 7, 9, 11, 13, 14, 15, 16], cap: 2.4, kbps: { 1: 80, 2: 104 }, relEvery: 1 }, /* 등급마다 따로 가지(ref)에 올려요: jsDelivr 는 ref 하나 50MB · 파일 하나 20MB 까지 [확인 필요] */
+  lite: { pianoLayers: [4, 8, 12, 16], cap: 1, kbps: { 1: 48, 2: 64 }, relEvery: 3, drum: { L: 3, R: 2, cap: 0.7 } }, /* v1.0-B.3: 40/56 → 48/64 kbps (10MB 안에서 조금 더 맑게) · 2단계 드럼: 세기 3 × 라운드로빈 2 */
+  standard: { pianoLayers: [2, 5, 8, 11, 14, 16], cap: 1.6, kbps: { 1: 64, 2: 96 }, relEvery: 1, drum: { L: 5, R: 3, cap: 1 } },
+  full: { pianoLayers: [1, 3, 5, 7, 9, 11, 13, 14, 15, 16], cap: 2.4, kbps: { 1: 80, 2: 104 }, relEvery: 1, drum: { L: 8, R: 4, cap: 1.3 } }, /* 등급마다 따로 가지(ref)에 올려요: jsDelivr 는 ref 하나 50MB · 파일 하나 20MB 까지 [확인 필요] */
 }[TIER]
 if (!Q) throw new Error('알 수 없는 등급: ' + TIER)
 
@@ -174,6 +175,70 @@ const INSTR = [
   { id: 'guitar', title: '어쿠스틱 기타 (물리 모델 · 자체 생성)', ch: 1, cap: () => 2.4 * Math.min(1.3, Q.cap), env: { a: 0.001, r: 0.2 }, synth: true,
     zones: () => { const z = []; for (let m = 40; m <= 79; m += 3) for (let l = 0; l < 3; l++) for (let rr = 0; rr < 2; rr++) z.push({ synth: true, midi: m, layer: l, rr, name: `ks_${m}_${l}_${rr}` }); return z } },
 ]
+/* ---------------- 2단계 드럼 멀티샘플: 킷마다 GM 음(킥 36 · 림 37 · 스네어 38 · 클랩 39 · 닫힌 햇 42 · 낮은 탐 45 · 열린 햇 46 · 크래시 49 · 높은 탐 50 · 라이드 51) × 세기 층 × 라운드로빈
+   · 어쿠스틱 = Virtuosity Drums (CC0) 의 가까운 마이크 + 오버헤드 + 룸을 같은 타격끼리 섞어(마이크가 동시에 녹음돼 정렬이 맞아요) 스테레오로
+   · 로파이 = 같은 녹음의 "lofi"(빈티지 마이크) 위치 + 룸 조금
+   · 808 · 909 = 아날로그 회로를 흉내 낸 이 스크립트의 합성(브리지드-T 공진 · 금속성 사각파 6개 · 잡음 버스트) — 녹음이 아닌 이 프로젝트 저작물(CC0).
+     세기 = 액센트(크기 · 드라이브 · 밝기), 라운드로빈 = 부품 오차(음높이 ±0.4% · 감쇠 ±4% · 잡음 씨앗)
+   · 원샷: 앱 · 플러그인은 놓기 없이 끝까지 재생 · 닫힌 햇이 열린 햇을 막아요 (engine/src/lib.rs drum_sample · wdsp.js drumSample) */
+const GM = { kick: 36, rim: 37, snare: 38, clap: 39, hhc: 42, ltom: 45, hho: 46, crash: 49, htom: 50, ride: 51 }
+const DCAP = { kick: 1.1, rim: 0.35, snare: 0.9, clap: 0.7, hhc: 0.45, ltom: 1.1, hho: 1.4, crash: 2.4, htom: 1, ride: 2 }
+const pickEven = (arr, n) => { if (arr.length <= n) return arr; const o = []; for (let i = 0; i < n; i++) o.push(arr[Math.round((i * (arr.length - 1)) / Math.max(1, n - 1))]); return [...new Set(o)] }
+// Virtuosity 파일 이름: Samples/<마이크>/<부품>/<마이크>_<주법>_vl<세기>[_rr<차례>].flac
+function vdZones(piece, art, mics) {
+  const re = new RegExp(`^Samples/${mics[0][0]}/[a-z]+/${mics[0][0]}_${art}_vl(\\d+)(?:_rr(\\d+))?\\.flac$`), hits = list('vd').map((p) => { const m = re.exec(p); return m && { p, vl: +m[1], rr: +(m[2] || 1) } }).filter(Boolean)
+  const vls = pickEven([...new Set(hits.map((h) => h.vl))].sort((a, b) => a - b), Q.drum.L), rrs = [...new Set(hits.map((h) => h.rr))].sort((a, b) => a - b).slice(0, Q.drum.R)
+  const out = []; for (const h of hits) { if (!vls.includes(h.vl) || !rrs.includes(h.rr)) continue; out.push({ src: 'vd', drum: true, root: GM[piece], piece, layer: vls.indexOf(h.vl), rr: rrs.indexOf(h.rr), name: h.p.split('/').pop(), mix: mics.map(([m, w]) => ({ path: h.p.replace(new RegExp(`^Samples/${mics[0][0]}/`), `Samples/${m}/`).replace(new RegExp(`/${mics[0][0]}_`), `/${m}_`), w })) }) }
+  if (!out.length) throw new Error('Virtuosity 파일 없음: ' + art)
+  return out
+}
+function acousticKit(mixFor) {
+  return () => [
+    ...vdZones('kick', 'kick_snon', mixFor('kick')), ...vdZones('snare', 'snare_center', mixFor('snare')), ...vdZones('rim', 'snare_rimshot', mixFor('snare')), ...vdZones('clap', 'snare_crossstick', mixFor('snare')),
+    ...vdZones('hhc', 'hh_closed', mixFor('cym')), ...vdZones('hho', 'hh_open', mixFor('cym')), ...vdZones('ltom', 'ltom_center', mixFor('tom')), ...vdZones('htom', 'htom_center', mixFor('tom')),
+    ...vdZones('crash', 'crash_crash', mixFor('cym')), ...vdZones('ride', 'ride_ride', mixFor('cym')),
+  ]
+}
+const ACOUSTIC_MIX = (k) => ({ kick: [['kickmic', 1], ['oh', 0.55], ['room', 0.35]], snare: [['snaremic', 1], ['oh', 0.55], ['room', 0.35]], tom: [['oh', 1], ['mid', 0.5], ['room', 0.35]], cym: [['oh', 1], ['room', 0.3]] })[k]
+const LOFI_MIX = (k) => ({ kick: [['lofi', 1], ['room', 0.2]], snare: [['lofi', 1], ['room', 0.2]], tom: [['lofi', 1], ['room', 0.2]], cym: [['lofi', 1], ['room', 0.15]] })[k]
+
+// 아날로그 흉내 합성 (결정적: 씨앗 = 킷 · 부품 · 층 · 차례)
+function metal(n, freqs, r) { const o = new Float32Array(n), ph = freqs.map(() => r()); for (let i = 0; i < n; i++) { let s = 0; for (let k = 0; k < freqs.length; k++) { ph[k] += freqs[k] / SR; if (ph[k] >= 1) ph[k] -= 1; s += ph[k] < 0.5 ? 1 : -1 } o[i] = s / freqs.length } return o }
+const M808 = [205.3, 304.4, 369.6, 522.7, 540, 800], M909 = [263, 401, 462, 597, 703, 849] /* 808 의 금속 사각파 6개 주파수(회로에서 잰 값 — 사실값) · 909 흉내는 다른 비 */
+function drumSynth(model, piece, vel, seed) {
+  const r = rng(seed), j = (a) => 1 + (r() * 2 - 1) * a, acc = 0.55 + 0.45 * vel, cap = DCAP[piece], n = Math.round(cap * SR * 1.05), out = new Float32Array(n), noise = () => r() * 2 - 1, is9 = model === '909'
+  if (piece === 'kick') {
+    const f0 = (is9 ? 52 : 47) * j(0.004), dec = (is9 ? 0.32 : 0.9) * j(0.04) * (0.8 + 0.4 * vel), sweep = is9 ? 4.2 : 1.6, st = is9 ? 0.028 : 0.012; let ph = 0
+    for (let i = 0; i < n; i++) { const t = i / SR, f = f0 * (1 + sweep * Math.exp(-t / st)); ph += f / SR; out[i] = Math.sin(2 * Math.PI * ph) * Math.exp(-t / dec) }
+    const ck = biquad(Float32Array.from({ length: Math.round(SR * 0.004) }, noise), 'hp', is9 ? 2500 : 1200, 0.7); for (let i = 0; i < ck.length; i++) out[i] += ck[i] * (is9 ? 0.5 : 0.25) * acc * (1 - i / ck.length)
+    const drive = 1 + vel * (is9 ? 2.2 : 1.4); for (let i = 0; i < n; i++) out[i] = Math.tanh(out[i] * drive) / Math.tanh(drive)
+  } else if (piece === 'snare' || piece === 'rim') {
+    const rim = piece === 'rim', f1 = (rim ? 1700 : is9 ? 190 : 180) * j(0.004), f2 = (rim ? 520 : is9 ? 345 : 330) * j(0.004), td = rim ? 0.012 : is9 ? 0.09 : 0.11, nd = rim ? 0.01 : (is9 ? 0.19 : 0.16) * j(0.04)
+    let p1 = 0, p2 = 0; for (let i = 0; i < n; i++) { const t = i / SR; p1 += f1 * (1 + (is9 ? 0.25 : 0.08) * Math.exp(-t / 0.01)) / SR; p2 += f2 / SR; out[i] = (Math.sin(2 * Math.PI * p1) * 0.6 + Math.sin(2 * Math.PI * p2) * 0.4) * Math.exp(-t / td) }
+    if (!rim) { const nz = biquad(biquad(Float32Array.from({ length: n }, noise), 'hp', is9 ? 1200 : 1600, 0.7), 'lp', is9 ? 9000 : 7500, 0.7), snap = 0.5 + 0.5 * vel; for (let i = 0; i < n; i++) out[i] += nz[i] * Math.exp(-(i / SR) / nd) * snap * 1.1 }
+  } else if (piece === 'clap') {
+    const nz = biquad(Float32Array.from({ length: n }, noise), 'bp', (is9 ? 1500 : 1100) * j(0.02), 1.4), bursts = [0, 0.009, 0.019, 0.031].map((x) => x * j(0.08))
+    for (let i = 0; i < n; i++) { const t = i / SR; let a = 0; for (const b of bursts) if (t >= b) a = Math.max(a, Math.exp(-(t - b) / 0.0045)); const tail = t >= bursts[3] ? Math.exp(-(t - bursts[3]) / (is9 ? 0.13 : 0.16)) * 0.55 : 0; out[i] = nz[i] * Math.max(a, tail) * 2.2 }
+  } else if (piece === 'hhc' || piece === 'hho' || piece === 'crash' || piece === 'ride') {
+    const dec = { hhc: 0.035 + 0.02 * vel, hho: 0.32, crash: 1.1, ride: 1.4 }[piece] * j(0.04), base = (is9 ? M909 : M808).map((f) => f * (piece === 'ride' ? 1.5 : piece === 'crash' ? 1.25 : 1) * j(0.004))
+    const m = metal(n, base, r), hp = piece === 'ride' ? 5000 : piece === 'crash' ? 4000 : 7000, bp = biquad(biquad(m, 'bp', piece === 'ride' ? 8000 : 9500, 0.9), 'hp', hp, 0.7), nz = biquad(Float32Array.from({ length: n }, noise), 'hp', 8000, 0.7), nw = piece === 'crash' ? 0.6 : is9 ? 0.45 : 0.15
+    for (let i = 0; i < n; i++) { const t = i / SR; out[i] = (bp[i] * (1 - nw) + nz[i] * nw) * Math.exp(-t / dec) * (piece === 'ride' && t < 0.03 ? 1.6 : 1) * 2.4 }
+  } else if (piece === 'ltom' || piece === 'htom') {
+    const f0 = (piece === 'ltom' ? 95 : 145) * (is9 ? 1.05 : 1) * j(0.004), dec = (is9 ? 0.28 : 0.38) * j(0.04); let ph = 0
+    for (let i = 0; i < n; i++) { const t = i / SR; ph += f0 * (1 + 0.6 * Math.exp(-t / 0.02)) / SR; out[i] = Math.sin(2 * Math.PI * ph) * Math.exp(-t / dec) }
+    if (is9) { const nz = biquad(Float32Array.from({ length: Math.round(SR * 0.03) }, noise), 'bp', 900, 1); for (let i = 0; i < nz.length; i++) out[i] += nz[i] * 0.3 * (1 - i / nz.length) }
+  }
+  for (let i = 0; i < n; i++) out[i] *= acc
+  return [out] /* 모노 (회로 흉내라 좌우가 같아요 — 스테레오로 담으면 크기만 두 배) */
+}
+function synthKit(model) { const L = Math.min(Q.drum.L, 4), R = Math.min(Q.drum.R, 3); return () => { const z = []; let k = 0; for (const piece of Object.keys(GM)) { for (let l = 0; l < L; l++) for (let rr = 0; rr < R; rr++) z.push({ synth: true, drum: true, model, piece, root: GM[piece], layer: l, rr, vel: L === 1 ? 1 : 0.35 + 0.65 * (l / (L - 1)), seed: 7000 + (model === '909' ? 5000 : 0) + k * 131 + l * 17 + rr * 5, name: `${model}_${piece}_${l}_${rr}` }) ; k++ } return z } }
+const DRUMS = [
+  { id: 'd-acoustic', kit: 'acoustic', title: '어쿠스틱 드럼 (Virtuosity Drums · 가까운 + 오버헤드 + 룸 마이크)', ch: 2, drum: true, env: { a: 0.0005, r: 0.05 }, zones: acousticKit(ACOUSTIC_MIX) },
+  { id: 'd-lofi', kit: 'lofi', title: '로파이 드럼 (Virtuosity Drums · 빈티지 마이크)', ch: 2, drum: true, env: { a: 0.0005, r: 0.05 }, zones: acousticKit(LOFI_MIX) },
+  { id: 'd-808', kit: 'k808', title: '808 스타일 드럼 (아날로그 흉내 합성 · 자체 생성)', ch: 1, drum: true, env: { a: 0.0005, r: 0.05 }, zones: synthKit('808') },
+  { id: 'd-909', kit: 'house', title: '909 스타일 드럼 (아날로그 흉내 합성 · 자체 생성)', ch: 1, drum: true, env: { a: 0.0005, r: 0.05 }, zones: synthKit('909') },
+]
+
 const IRS = [
   { id: 'room', title: '스튜디오 룸', dims: [6, 4.5, 3], rt: [0.7, 0.55, 0.35], len: 0.9, seed: 11 },
   { id: 'hall', title: '콘서트 홀', dims: [32, 22, 14], rt: [2.6, 2.1, 1.2], len: 2.8, pre: 0.022, seed: 23 },
@@ -185,19 +250,22 @@ const sha = (b) => createHash('sha256').update(b).digest('hex')
 function buildInstrument(def) {
   const zs = def.zones(), gap = Math.round(SR * 0.08), zones = []
   if (!zs.length) throw new Error(def.id + ': 원본 샘플이 없어요')
-  const paths = {}; for (const z of zs) if (!z.synth) (paths[z.src] = paths[z.src] || []).push(z.path)
+  const paths = {}; for (const z of zs) if (!z.synth && z.path) (paths[z.src] = paths[z.src] || []).push(z.path)
+  for (const z of zs) if (z.mix) (paths[z.src] = paths[z.src] || []).push(...z.mix.map((m) => m.path))
   for (const k in paths) fetchFiles(k, paths[k])
   const raw = zs.map((z) => {
+    if (z.drum && z.synth) return { z, chs: drumSynth(z.model, z.piece, z.vel, z.seed), root: z.root }
+    if (z.drum) { let acc = null; for (const m of z.mix) { const c = decode(join(SRC, z.src, m.path), def.ch); if (!acc) acc = c.map((a) => a.map((v) => v * m.w)); else for (let q = 0; q < def.ch; q++) { const a = acc[q], b = c[q], L = Math.max(a.length, b.length); if (L > a.length) { const na = new Float32Array(L); na.set(a); acc[q] = na } for (let i = 0; i < b.length; i++) acc[q][i] += b[i] * m.w } } return { z, chs: acc, root: z.root } } /* 같은 타격의 마이크들을 섞어요 */
     if (z.synth) return { z, chs: guitarNote(z.midi, [0.35, 0.65, 1][z.layer], 1000 + z.midi * 31 + z.layer * 7 + z.rr * 3, def.cap(z.midi) + 0.1), root: z.midi }
     const chs = decode(join(SRC, z.src, z.path), def.ch); return { z, chs, byName: nameMidi(z.name), det: detectMidi(chs) }
   })
-  const fix = octaveFix(raw); for (const r of raw) if (r.root == null) r.root = r.byName != null ? r.byName + fix.off : Math.round(r.det || 60)
-  if (!zs[0].synth) console.log(`  ${def.id}: 옥타브 보정 ${fix.off} (표: ${JSON.stringify(fix.votes)})`)
+  const fix = def.drum ? { off: 0, votes: {} } : octaveFix(raw); for (const r of raw) if (r.root == null) r.root = r.byName != null ? r.byName + fix.off : Math.round(r.det || 60)
+  if (!zs[0].synth && !def.drum) console.log(`  ${def.id}: 옥타브 보정 ${fix.off} (표: ${JSON.stringify(fix.votes)})`)
   const gpk = Math.max(...raw.map((r) => peakOf(r.chs))) || 1, norm = 0.89 / gpk
   // 스프라이트가 너무 길면 여러 파일로 나눠요 (jsDelivr 는 파일 하나 20MB 까지)
   const MAXSEC = Math.floor((12 * 1048576 * 8) / (Q.kbps[def.ch] * 1000)) /* VBR 이라 실제 크기가 15~20% 넘칠 수 있어 12MB 를 목표로 */, sprites = []; let cur = null
   for (const r of raw.sort((a, b) => a.root - b.root || a.z.layer - b.z.layer || a.z.rr - b.z.rr)) {
-    const c = trim(r.chs.map((a) => a.map((v) => v * norm)), def.cap(r.root))
+    const c = def.drum ? trim(r.chs.map((a) => a.map((v) => v * norm)), DCAP[r.z.piece] * Q.drum.cap, Math.min(0.08, DCAP[r.z.piece] * Q.drum.cap * 0.3)) : trim(r.chs.map((a) => a.map((v) => v * norm)), def.cap(r.root))
     if (!cur || (cur.t + c[0].length) / SR > MAXSEC) { cur = { parts: [], t: gap }; sprites.push(cur) }
     zones.push({ root: r.root, layer: r.z.layer, rr: r.z.rr || 0, t0: +(cur.t / SR).toFixed(5), len: +(c[0].length / SR).toFixed(5), ...(sprites.length > 1 ? { f: sprites.length - 1 } : {}), ...(r.z.group ? { group: r.z.group } : {}) })
     cur.parts.push(c); cur.t += c[0].length + gap
@@ -208,7 +276,7 @@ function buildInstrument(def) {
     const file = def.id + (sprites.length > 1 ? '-' + k : '') + '.ogg'; encodeOpus(chs, join(OUT, file), Q.kbps[def.ch]); return file
   })
   const total = sprites.reduce((a, sp) => a + sp.t, 0)
-  const inst = { title: def.title, file: files[0], ...(files.length > 1 ? { files } : {}), ch: def.ch, layers: Math.max(...zones.map((z) => z.layer)) + 1, rr: Math.max(...zones.map((z) => z.rr)) + 1, env: def.env, zones }
+  const inst = { title: def.title, ...(def.drum ? { drum: true, kit: def.kit } : {}), file: files[0], ...(files.length > 1 ? { files } : {}), ch: def.ch, layers: Math.max(...zones.map((z) => z.layer)) + 1, rr: Math.max(...zones.map((z) => z.rr)) + 1, env: def.env, zones }
   if (def.release) {
     const rs = def.release(); fetchFiles('sal', rs.map((r) => r.path)); const rp = [], rz = []; let rt = gap
     for (const r of rs) { const c = trim(decode(join(SRC, 'sal', r.path), def.ch).map((a) => a.map((v) => v * norm * 2.5)), 0.6, 0.15); rp.push(c); rz.push({ root: r.midi, t0: +(rt / SR).toFixed(5), len: +(c[0].length / SR).toFixed(5) }); rt += c[0].length + gap }
@@ -223,12 +291,15 @@ function main() {
   if (existsSync(OUT)) rmSync(OUT, { recursive: true }); mkdirSync(OUT, { recursive: true })
   console.log(`음원 팩 만들기: ${TIER} → ${OUT}`)
   const instruments = {}, irs = {}
-  for (const d of INSTR) instruments[d.id] = buildInstrument(d)
+  for (const d of INSTR) if (!process.env.ONLY_DRUMS) instruments[d.id] = buildInstrument(d) /* ONLY_DRUMS=1: 드럼만 시험 빌드 */
+  if (!process.env.NO_DRUMS) for (const d of DRUMS) instruments[d.id] = buildInstrument(d)
   for (const r of IRS) { const file = 'ir-' + r.id + '.wav'; writeFileSync(join(OUT, file), wav16(makeIR(r))); irs[r.id] = { title: r.title, file, rt60: r.rt[1], len: r.len } }
   const assets = [
     { id: 'salamander', kind: 'sample', title: 'Salamander Grand Piano V3', source: REPOS.sal.source, url: 'https://archive.org/details/SalamanderGrandPianoV3', license: REPOS.sal.license, author: REPOS.sal.author, use: 'ship' },
     { id: 'vsco2ce', kind: 'sample', title: 'VS Chamber Orchestra: Community Edition', source: REPOS.vsco.source, url: 'https://github.com/sgossner/VSCO-2-CE', license: REPOS.vsco.license, author: REPOS.vsco.author, use: 'ship' },
     { id: 'ks-guitar', kind: 'sample', title: '물리 모델 기타 (확장 카플러스-스트롱 합성)', source: '이 프로젝트 scripts/build-packs.mjs', url: 'https://github.com/sin1311/-', license: 'CC0-1.0', author: '이 프로젝트', use: 'ship' },
+    { id: 'virtuosity', kind: 'sample', title: 'Virtuosity Drums', source: REPOS.vd.source, url: REPOS.vd.url, license: REPOS.vd.license, author: REPOS.vd.author, use: 'ship' },
+    { id: 'gen-drums', kind: 'sample', title: '808 · 909 스타일 드럼 (아날로그 흉내 합성)', source: '이 프로젝트 scripts/build-packs.mjs', url: 'https://github.com/sin1311/-', license: 'CC0-1.0', author: '이 프로젝트', use: 'ship' },
     { id: 'gen-ir', kind: 'ir', title: '공간 응답 3종 (영상원 + 지수 감쇠 합성)', source: '이 프로젝트 scripts/build-packs.mjs', url: 'https://github.com/sin1311/-', license: 'CC0-1.0', author: '이 프로젝트', use: 'ship' },
   ]
   const files = {}
@@ -239,7 +310,7 @@ function main() {
   writeFileSync(join(OUT, 'manifest.json'), JSON.stringify(man))
   const total = Object.values(files).reduce((a, f) => a + f.bytes, 0)
   console.log(`끝: 파일 ${Object.keys(files).length}개 · ${(total / 1048576).toFixed(2)} MB`)
-  if (TIER === 'lite' && total > 10 * 1048576) throw new Error('lite 팩은 10MB 이하여야 해요')
+  if (TIER === 'lite' && total > 12 * 1048576) throw new Error('lite 팩은 12MB 이하여야 해요') /* 2단계: 드럼 4킷이 들어가 10 → 12MB */
   void statSync
 }
 main()
