@@ -16,7 +16,7 @@ import { SYNTH, renderSynth } from '../src/scene/factory/synth.js'
 import { faceRGB, simDepthFaces, alignFaces, mergeFaces, FOV } from '../src/scene/factory/depth.js'
 import { fitGroundPano, toMetric } from '../src/scene/factory/ground.js'
 import { buildLDI, parallaxBudget } from '../src/scene/factory/ldi.js'
-import { plateCandidates, plateKeep, yunetDecode, anonBlur, plateBlank, faceKeep, privacyLoad } from '../src/scene/factory/blur.js'
+import { plateCandidates, plateKeep, yunetDecode, anonBlur, plateBlank, faceKeep, privacyLoad, minimalDiv } from '../src/scene/factory/blur.js'
 import { analyzePano, levelRotation, rotateEquirect, rotateEquirectF, groundUp } from '../src/scene/factory/level.js'
 const LEVEL_G = { on: false, minInl: 0.3, minTilt: 0.4, maxApply: 15 } /* 깊이 수평: 보정(실제 Poly Haven 150장)에서 반듯한 사진 오차 중앙 0.83° · 90% 3.1°, 5~12° 는 중앙 2.7° · 90% 8.4° → 안전 기준(적용 95% ≤ 1°)을 지키는 규칙이 없어 꺼 둬요. 두 방식 합의 규칙은 다음 보정에서 */
 import { faceTiles, closeFace, mergeBoxes, normDisp, shotPlates } from '../src/scene/factory/shotkit.js'
@@ -24,6 +24,11 @@ import { checkLicense, attribution } from '../src/scene/license.js'
 import { faceDir, uvOf } from '../src/scene/geom.js'
 
 const A = Object.fromEntries(process.argv.slice(2).reduce((o, a, i, l) => (a.startsWith('--') ? [...o, [a.slice(2), l[i + 1] && !l[i + 1].startsWith('--') ? l[i + 1] : '1']] : o), []))
+/* 1단계 모자이크 최소 충분 흐림: --sface models/sface.onnx 가 있으면 얼굴마다 알아볼 수 없을 만큼만 흐려요 (없으면 기존 세기 σ = 폭/8) */
+let sfaceP = null
+const sfaceEmbed = () => sfaceP || (sfaceP = (async () => { if (!A.sface) return null; const ort = await import('onnxruntime-node'), sess = await ort.InferenceSession.create(A.sface), inName = sess.inputNames[0]
+  return async (t) => { const o = await sess.run({ [inName]: new ort.Tensor('float32', t, [1, 3, 112, 112]) }); return Float32Array.from(o[sess.outputNames[0]].data) } })().catch((e) => { console.log('SFace 를 못 열어 기존 흐림 세기로: ' + e.message); return null }))
+async function minimalBoxes(rgb, W, H, boxes, wrap) { const emb = await sfaceEmbed(), out = [], log = []; for (const b of boxes) { const r = await minimalDiv(rgb, W, H, b, emb, { wrap }); out.push({ ...b, div: r.div }); log.push(r) } return { boxes: out, log } }
 const OUT = A.out || 'out/scenes', SRC = A.source || 'synthetic', W = +(A.size || 2048), H = W / 2, FN = +(A.facepx || 518), SEED = +(A.seed || 7)
 const sha = (b) => createHash('sha256').update(b).digest('hex')
 const log = (...x) => console.log('[scene]', ...x)
@@ -137,9 +142,9 @@ async function build(s) {
     const indoor = dq ? ['place:room', 'place:cafe', 'place:club', 'place:hall', 'place:temple'].reduce((a, k) => a + (dq[IX[k]] || 0), 0) > 0.5 : false /* 5회차: 실내 스튜디오 · 작업장 무늬에 빈 판이 8곳씩 → 실내(방 · 카페 · 클럽 · 홀 · 성당)는 번호판을 찾지 않아요 (주차장 · 터널은 찾아요) */
     const fk = faceKeep(pv.boxes, r, W, H), pk = indoor ? [] : plateKeep(pv.cands || [], r, W, H, { h }), load = privacyLoad([...fk, ...pk], W, H)
     if (load.frac > 0.02 || load.n > 20) { log('흐릴 곳이 너무 많아 뺐어요', s.id, JSON.stringify({ frac: +load.frac.toFixed(4), n: load.n })); return null }
-    rgb = plateBlank(anonBlur(rgb, W, H, fk), W, H, pk); pv.faces = fk.length; pv.plates = pk.length; pv.note = `얼굴 후보 ${pv.boxes.length}곳 중 실제 크기가 맞는 ${fk.length}곳을 알맞게 흐림 · ` + (indoor ? '실내라 번호판은 찾지 않음' : `번호판 후보 ${(pv.cands || []).length}곳 중 ${pk.length}곳은 빈 판으로`); pv.load = +load.frac.toFixed(4)
+    const mb = await minimalBoxes(rgb, W, H, fk, true); pv.blur = mb.log; rgb = plateBlank(anonBlur(rgb, W, H, mb.boxes), W, H, pk); pv.faces = fk.length; pv.plates = pk.length; pv.note = `얼굴 후보 ${pv.boxes.length}곳 중 실제 크기가 맞는 ${fk.length}곳을 알맞게 흐림 · ` + (indoor ? '실내라 번호판은 찾지 않음' : `번호판 후보 ${(pv.cands || []).length}곳 중 ${pk.length}곳은 빈 판으로`); pv.load = +load.frac.toFixed(4)
   }
-  const rep = { id: s.id, depth: how, ground: { inliers: +cal.inl.toFixed(3), S: +cal.S.toFixed(5), T: +cal.T.toFixed(5), h }, privacy: { faces: pv.faces, plates: pv.plates, review: !!pv.review, note: pv.note, load: pv.load }, level: lev && { tilt: lev.tilt, applied: lev.level, by: lev.by, gTilt: lev.gTilt, gInl: lev.gInl, conf: lev.conf, manh: lev.manh } }
+  const rep = { id: s.id, depth: how, ground: { inliers: +cal.inl.toFixed(3), S: +cal.S.toFixed(5), T: +cal.T.toFixed(5), h }, privacy: { faces: pv.faces, plates: pv.plates, review: !!pv.review, note: pv.note, load: pv.load, blur: pv.blur }, level: lev && { tilt: lev.tilt, applied: lev.level, by: lev.by, gTilt: lev.gTilt, gInl: lev.gInl, conf: lev.conf, manh: lev.manh } }
   if (truth) { const e = []; for (let i = 0; i < r.length; i += 7) if (Number.isFinite(truth[i]) && truth[i] < 60) e.push(Math.abs(r[i] / truth[i] - 1)); e.sort((x, y) => x - y); rep.calErr = { median: +e[e.length >> 1].toFixed(4), p90: +e[(e.length * 0.9) | 0].toFixed(4) } }
   const L = buildLDI(rgb, r, W, H, { layers: +(A.layers || 3) }), _pb = parallaxBudget(L.layers, W, H), dir = join(OUT, s.id); await mkdir(dir, { recursive: true }); const files = {}, layers = []
   for (let k = 0; k < L.layers.length; k++) {
@@ -174,7 +179,7 @@ async function buildShot(s) {
   const pw = 1024, ph = Math.round(1024 * SH / SW), small = new Uint8Array(await sh(Buffer.from(rgb), { raw: { width: SW, height: SH, channels: 3 } }).resize(pw, ph, { fit: 'fill' }).raw().toBuffer()), k = SW / pw
   const plates = s.blurred ? [] : shotPlates(plateCandidates(small, pw, ph).map((b) => ({ x: b.x * k, y: b.y * k, w: b.w * k, h: b.h * k, score: b.score })), SW, SH, { sub: s.sub })
   const ld = fb.reduce((a, b) => a + b.w * b.h * Math.PI / 4, 0) / (SW * SH); if (ld > 0.03) { log('컷 거절 (흐릴 곳이 너무 많아요)', s.id, +ld.toFixed(4)); return null }
-  rgb = plateBlank(anonBlur(rgb, SW, SH, fb, { wrap: false }), SW, SH, plates, { wrap: false }) /* 사생활 2판: 얼굴은 알맞게 흐리고 번호판은 빈 판으로 */
+  const mb = await minimalBoxes(rgb, SW, SH, fb, false); rgb = plateBlank(anonBlur(rgb, SW, SH, mb.boxes, { wrap: false }), SW, SH, plates, { wrap: false }) /* 사생활 2판: 얼굴은 알맞게 흐리고 번호판은 빈 판으로 */
   let disp, how
   if (A.depth) {
     const ort = await import('onnxruntime-node'), sess = await ort.InferenceSession.create(A.depth), M = [0.485, 0.456, 0.406], SD = [0.229, 0.224, 0.225]

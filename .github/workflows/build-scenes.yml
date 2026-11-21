@@ -43,13 +43,14 @@ jobs:
           mkdir -p models
           curl -fL -o models/dav2s.onnx https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/main/onnx/model.onnx
           curl -fL -o models/yunet.onnx https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx
+          curl -fL -o models/sface.onnx https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx  # 1단계 모자이크 최소 충분 흐림 (SFace · Apache-2.0)
           ls -la models
       - name: 장면 만들기 · 가지에 나눠 올리기 (scenes = 목록, scenes-1 · scenes-2 … = 장면, 가지마다 40MB 이하)
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           IDS="${{ github.event.inputs.ids }}"; THEMES="${{ github.event.inputs.themes }}"
-          node scripts/scene-factory.mjs --source polyhaven --count "${{ github.event.inputs.count }}" ${THEMES:+--themes "$THEMES"} ${IDS:+--ids "$IDS"} --size "${{ github.event.inputs.size }}" --shard 40 --depth models/dav2s.onnx --face models/yunet.onnx --out out
+          node scripts/scene-factory.mjs --source polyhaven --count "${{ github.event.inputs.count }}" ${THEMES:+--themes "$THEMES"} ${IDS:+--ids "$IDS"} --size "${{ github.event.inputs.size }}" --shard 40 --depth models/dav2s.onnx --face models/yunet.onnx --sface models/sface.onnx --out out
           cat out/scenes/report.json | head -c 20000
           du -sh out/*
           REPO="https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"

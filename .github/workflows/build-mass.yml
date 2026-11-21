@@ -94,11 +94,12 @@ jobs:
           mkdir -p models
           curl -fL -o models/dav2s.onnx https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/main/onnx/model.onnx
           curl -fL -o models/yunet.onnx https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx
+          curl -fL -o models/sface.onnx https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx  # 1단계 모자이크 최소 충분 흐림 (SFace · Apache-2.0)
       - uses: actions/download-artifact@v4
         continue-on-error: true
         with: { name: panda, path: panda/ }
       - name: 장면 만들기 (조각 ${{ matrix.shard }})
-        run: node scripts/scene-mass.mjs --stage build --shard ${{ matrix.shard }}/$SHARDS --out out/scenes-r${{ github.run_number }}-${{ matrix.shard }} --size "${{ github.event.inputs.size }}" --depth models/dav2s.onnx --face models/yunet.onnx $( [ -f panda/panda_small.onnx ] && echo --panda panda/panda_small.onnx )
+        run: node scripts/scene-mass.mjs --stage build --shard ${{ matrix.shard }}/$SHARDS --out out/scenes-r${{ github.run_number }}-${{ matrix.shard }} --size "${{ github.event.inputs.size }}" --depth models/dav2s.onnx --face models/yunet.onnx --sface models/sface.onnx $( [ -f panda/panda_small.onnx ] && echo --panda panda/panda_small.onnx )
       - name: 올리기 (Hugging Face 또는 GitHub 가지)
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}

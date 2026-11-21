@@ -81,7 +81,7 @@ const hashN = (x, y) => { let h = (x * 374761393 + y * 668265263) | 0; h = (h ^ 
 export function anonBlur(rgb, W, H, boxes, { ch = 3, wrap = true, div = 8, noise = true } = {}) { /* div 8 (2026-11-19 사용자 결정: 6 → 8, 25% 완화). 10% 대비 경계 0.34·w/σ = 얼굴 폭당 약 2.7 주기 — 알아보려면 4~8 주기가 필요해요. 안전한 최대는 10 (3.4 주기) */
   const out = rgb.slice(), X = (x) => (wrap ? ((x % W) + W) % W : Math.max(0, Math.min(W - 1, x)))
   for (const b of boxes) {
-    const sig = Math.max(1, Math.min(b.w, b.h) / div), pad = Math.ceil(sig * 3), x0 = Math.floor(b.x - pad), y0 = Math.max(0, Math.floor(b.y - pad)), x1 = Math.ceil(b.x + b.w + pad), y1 = Math.min(H, Math.ceil(b.y + b.h + pad)), bw = x1 - x0, bh = y1 - y0
+    const sig = Math.max(1, Math.min(b.w, b.h) / (b.div || div)), /* b.div: 상자마다 정한 흐림 (minimalDiv — 알아볼 수 없을 만큼만) */ pad = Math.ceil(sig * 3), x0 = Math.floor(b.x - pad), y0 = Math.max(0, Math.floor(b.y - pad)), x1 = Math.ceil(b.x + b.w + pad), y1 = Math.min(H, Math.ceil(b.y + b.h + pad)), bw = x1 - x0, bh = y1 - y0
     if (bw < 2 || bh < 2) continue
     const buf = new Float32Array(bw * bh * ch); for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) { const i = ((y0 + y) * W + X(x0 + x)) * ch; for (let c = 0; c < ch; c++) buf[(y * bw + x) * ch + c] = rgb[i + c] }
     const bl = gauss(buf, bw, bh, ch, sig), cx = b.x + b.w / 2 - x0, cy = b.y + b.h / 2 - y0, rx = b.w / 2, ry = b.h / 2
@@ -120,4 +120,26 @@ export function privacyLoad(boxes, W, H, { band = 35 } = {}) {
   const y0 = H * (0.5 - band / 180), y1 = H * (0.5 + band / 180); let a = 0, n = 0
   for (const b of boxes) { const yy0 = Math.max(y0, b.y), yy1 = Math.min(y1, b.y + b.h); if (yy1 <= yy0) continue; a += b.w * (yy1 - yy0) * Math.PI / 4; n++ }
   return { frac: a / (W * (y1 - y0)), n }
+}
+
+/* 1단계 "모자이크 최소 충분 흐림" (사용자: 모자이크를 허용되는 최대한까지 완화): 얼굴마다 '얼굴 인식이 더는 같은 사람으로 못 알아보는' 가장 약한 흐림을 찾아요.
+   embed(crop112) → 얼굴 특징 벡터 (SFace · OpenCV Zoo · Apache-2.0, 112×112 RGB 0–255). 원본과 흐린 얼굴의 코사인 유사도가 tau(기본 0.25 — SFace 같은 사람 기준 0.363 보다 한참 아래)
+   밑이면 "충분". div 를 [lo, hi] 에서 이분 탐색 (div 가 클수록 σ = 폭/div 가 작아 약한 흐림) — 흐림이 셀수록 유사도가 줄어드는 단조성을 가정하고, 찾은 값은 한 번 더 확인해요.
+   안전: 얼굴이 너무 작으면(폭 < 24px) 탐색 없이 기존 세기(lo), embed 가 없거나 실패하면 lo, 결과는 사람 확인 목록과 별개로 기록. 번호판은 이미 빈 판으로 지워서(plateBlank) 그대로. */
+export function faceCrop112(rgb, W, H, b, { ch = 3, wrap = true } = {}) {
+  const out = new Float32Array(3 * 112 * 112), X = (x) => (wrap ? ((x % W) + W) % W : Math.max(0, Math.min(W - 1, x)))
+  for (let y = 0; y < 112; y++) for (let x = 0; x < 112; x++) { const sx = b.x + (x + 0.5) / 112 * b.w, sy = Math.max(0, Math.min(H - 1, b.y + (y + 0.5) / 112 * b.h)), i = (Math.floor(sy) * W + X(Math.floor(sx))) * ch
+    for (let c = 0; c < 3; c++) out[c * 112 * 112 + y * 112 + x] = rgb[i + c] }
+  return out
+}
+const cosv = (a, b) => { let ab = 0, aa = 0, bb = 0; for (let i = 0; i < a.length; i++) { ab += a[i] * b[i]; aa += a[i] * a[i]; bb += b[i] * b[i] } return ab / Math.sqrt(aa * bb + 1e-12) }
+export async function minimalDiv(rgb, W, H, b, embed, { lo = 8, hi = 32, tau = 0.25, iters = 5, wrap = true, minPx = 24 } = {}) {
+  if (!embed || Math.min(b.w, b.h) < minPx) return { div: lo, sim: null, why: embed ? '작은 얼굴' : '인식 모델 없음' }
+  try {
+    const e0 = await embed(faceCrop112(rgb, W, H, b, { wrap })), simAt = async (div) => cosv(e0, await embed(faceCrop112(anonBlur(rgb, W, H, [{ ...b, div }], { wrap, noise: true }), W, H, b, { wrap })))
+    const sh = await simAt(hi); if (sh < tau) return { div: hi, sim: +sh.toFixed(3), why: '가장 약한 흐림으로도 충분' }
+    let a = lo, z = hi, sa = await simAt(lo); if (sa >= tau) return { div: lo, sim: +sa.toFixed(3), why: '기존 세기도 모자라 기존 세기 유지 · 사람 확인' }
+    for (let k = 0; k < iters; k++) { const m = (a + z) / 2, sm = await simAt(m); if (sm < tau) { a = m; sa = sm } else z = m }
+    return { div: +a.toFixed(2), sim: +sa.toFixed(3), why: '알아볼 수 없을 만큼만' }
+  } catch (e) { return { div: lo, sim: null, why: '인식 실패 → 기존 세기' } }
 }
