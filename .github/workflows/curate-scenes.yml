@@ -12,6 +12,7 @@ on:
       cut: { description: '판정 기준 덮어쓰기 JSON (예: {"rej":0.15,"appeal":0.5}) · 비우면 briefs.js 기본값', default: '' }
       apply: { description: '통과한 장면만 남긴 목록을 scenes 가지에 반영', type: boolean, default: false }
       reuse: { description: '다시 채점하지 않고 지난 실행의 채점으로 판정만 다시', type: boolean, default: false }
+      min_keep: { description: '반영할 때 남아야 하는 최소 장면 수 (실수로 다 지우지 않게 · 엄격한 기준이면 낮춰요)', default: '60' }
       from_run: { description: 'reuse 일 때 채점 · 썸네일을 가져올 실행 번호(run id) — 비우면 review 가지 curation.json (썸네일 없음)', default: '' }
 permissions:
   contents: write
@@ -88,10 +89,10 @@ jobs:
           (cd review && git init -q -b review && git add -A && git commit -q -m "큐레이션 검토 (회차 ${{ github.run_number }})" && for k in 1 2 3 4; do git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" review && break; sleep $((k * 15)); done)
       - name: scenes 가지에 반영 (apply)
         if: ${{ github.event.inputs.apply == 'true' }}
-        env: { CUT: '${{ github.event.inputs.cut }}' }
+        env: { CUT: '${{ github.event.inputs.cut }}', MIN_KEEP: '${{ github.event.inputs.min_keep }}' }
         run: |
           node scripts/scene-mass.mjs --stage apply --existing prev/index.json --curation review/curation.json --out out/index.json ${CUT:+--cut "$CUT"}
-          node -e "const a=require('./prev/index.json'),b=require('./out/index.json');const n=a.scenes.length,m=b.scenes.length;console.log('장면',n,'→',m,'· 컷',(a.shots||[]).length,'→',(b.shots||[]).length);if(m<Math.max(60,n*0.08)){console.error('남은 장면이 너무 적어요 — 기준값을 확인하세요. 올리지 않아요');process.exit(1)}"
+          node -e "const a=require('./prev/index.json'),b=require('./out/index.json');const n=a.scenes.length,m=b.scenes.length;console.log('장면',n,'→',m,'· 컷',(a.shots||[]).length,'→',(b.shots||[]).length);if(m<+(process.env.MIN_KEEP||60)){console.error('남은 장면이 너무 적어요 — 기준값을 확인하세요. 올리지 않아요');process.exit(1)}"
           git clone -q --depth 1 -b scenes "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" site
           [ -f site/index.pre-curation.json ] || cp prev/index.json site/index.pre-curation.json # 처음 반영할 때의 원래 목록을 되돌리기용으로 남겨요
           cp out/index.json site/index.json
