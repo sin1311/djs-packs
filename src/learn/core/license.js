@@ -14,8 +14,12 @@ export const LEVELS = [['open', '자유'], ['attribution', '저작자 표기'], 
 export const KINDS = ['code', 'font', 'data', 'midi', 'audio', 'sample', 'ir', 'image', 'pano', 'hdri', 'model3d', 'splat', 'video', 'model', 'service']
 export const PACKS = { core: '기본 팩', sa: 'SA 팩 (CC BY-SA 로 따로 배포)' }
 const STREET = new Set(['image', 'pano', 'video', 'splat'])
-export function classify(lic) { return OPEN[lic] ? 'open' : ATTRIB[lic] ? 'attribution' : SHAREALIKE[lic] ? 'sharealike' : LIMITED[lic] ? 'limited' : 'unknown' }
-export const licName = (lic) => OPEN[lic] || ATTRIB[lic] || SHAREALIKE[lic] || LIMITED[lic] || lic
+const one = (lic) => (OPEN[lic] ? 'open' : ATTRIB[lic] ? 'attribution' : SHAREALIKE[lic] ? 'sharealike' : LIMITED[lic] ? 'limited' : 'unknown')
+const RANK = ['open', 'attribution', 'sharealike', 'limited', 'unknown']
+// SPDX 선택 표현 "A OR B"(이중 라이선스 — 받는 쪽이 고를 수 있어요): 아는 것 중 가장 덜 제한적인 쪽으로 (AND · WITH 는 안 받아요 → 모름)
+export function classify(lic) { const alts = String(lic || '').replace(/^\(|\)$/g, '').split(/\s+OR\s+/); if (alts.length === 1) return one(lic); return alts.map((x) => one(x.trim())).sort((a, b) => RANK.indexOf(a) - RANK.indexOf(b))[0] }
+const name1 = (lic) => OPEN[lic] || ATTRIB[lic] || SHAREALIKE[lic] || LIMITED[lic] || lic
+export const licName = (lic) => String(lic || '').split(/\s+OR\s+/).map((x) => name1(x.trim())).join(' 또는 ')
 // a: { id, kind, title, source, url, license, author, pack: 'core'|'sa', use: 'stats'|'ship', tags: [], privacy: { faces, plates } }
 export function validateAsset(a, { commercial = true, pack } = {}) {
   const problems = [], warns = []

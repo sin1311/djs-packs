@@ -106,7 +106,7 @@ async function briefScoreStage() {
     const emb = await M.image(small, w, h, { flat: true }), sc = scoreScene(emb, T, prompts, tech), v = verdict(sc, cut), g = c.genre || c.sub, rank = Object.entries(sc.fit).sort((x, y) => y[1] - x[1]).findIndex(([k]) => k === g)
     const ds = descOf(emb), kw = kwScores(c.text); if (ds) for (let i = 0; i < N; i++) ds[i] += kw[i] * 0.15; c.desc = pack(sceneDist({ clip: ds || kw, stats: gq.stats })); c.theme = c.sub
     const ok = gq.pass && v.ok && rank >= 0 && rank < 3 && (sc.fit[g] || 0) >= 0.12; c.cur = { ...sc, ok, why: ok ? '' : !gq.pass ? '품질 관문: ' + (gq.why || []).join(', ').slice(0, 60) : v.why || `장르(${g})와 덜 맞아요 (순위 ${rank + 1})`, shot: true, name: c.title, genre: g }
-    c.g = packFit(sc.fit); c.ap = Math.round(sc.appeal * 255); c.pass = ok; if (ok) kept++; else { const k = c.cur.why.split(/[:(]/)[0].trim(); why[k] = (why[k] || 0) + 1 }
+    c.g = packFit(sc.fit); c.ap = Math.round(sc.appeal * 255); if (sc.aes != null) c.ae = Math.round(sc.aes * 25); c.pass = ok; if (ok) kept++; else { const k = c.cur.why.split(/[:(]/)[0].trim(); why[k] = (why[k] || 0) + 1 }
     await S(Buffer.from(small), { raw: { width: w, height: h, channels: 3 } }).resize(320, 180, { fit: 'cover' }).jpeg({ quality: 70 }).toFile(join(td, c.id + '.jpg')); out.push(c)
     if (++n % 100 === 0) log(`브리프 채점 ${n}/${mine.length} · 통과 ${kept} · ${((Date.now() - t0) / n / 1000).toFixed(2)}초/장`)
   })
@@ -161,7 +161,7 @@ async function buildStage() {
     if (c.kind === 'shot') Object.assign(s, { kind: 'shot', sub: c.sub, theme: c.sub, name: `${top} · ${c.title}`.slice(0, 60) })
     try { const r = c.kind === 'shot' ? await F.buildShot(s) : await F.build(s); if (r) parts.push({ man: r.man, rep: r.rep, pack: c.pack }) } catch (e) { log('실패 (건너뜀):', c.id, String(e.message || e).slice(0, 160)) }
   }
-  const gOf = new Map(mine.filter((c) => c.g).map((c) => [c.id, { g: c.g, ap: c.ap, genre: c.genre }])) /* 브리프 컷: 장르 적합도 · 감성을 목록까지 */
+  const gOf = new Map(mine.filter((c) => c.g).map((c) => [c.id, { g: c.g, ap: c.ap, ...(c.ae != null ? { ae: c.ae } : {}), genre: c.genre }])) /* 브리프 컷: 장르 적합도 · 감성을 목록까지 */
   await wr(join(out, 'part.json'), parts.map((p) => ({ id: p.man.id, name: p.man.name, kind: p.man.kind, ...(p.man.sub ? { sub: p.man.sub } : {}), ...(gOf.get(p.man.id) || {}), label: p.man.label, theme: p.man.theme, desc: p.man.desc, stats: p.man.stats, review: p.man.review, pack: p.pack, manifest: p.man.id + '/manifest.json', sha: F.sha(JSON.stringify(p.man, null, 1)) })))
   log(`조각 ${i}/${n}:`, parts.length, '/', mine.length, '장면')
 }
@@ -407,7 +407,7 @@ async function reviewStage() {
 }
 async function applyStage() {
   const { verdict, CUT, packFit } = await import('../src/scene/briefs.js'), cut = { ...CUT, ...(A.cut ? JSON.parse(A.cut) : {}) }, ix = await rd(A.existing, { scenes: [], shots: [] }), cur = await rd(A.curation, {})
-  const keep = (s) => { const c = cur[s.id]; if (!c) { if (!(s.kind === 'synthetic' || s.g)) return null; const { stats, ...rest } = s; return rest } /* 채점 못 한 장면은 빼요 (안전) · 브리프 컷(만들 때 이미 채점 · g 있음)은 그대로 */; if (!verdict(c, cut).ok) return null; const { stats, ...rest } = s; return { ...rest, g: packFit(c.fit), ap: Math.round(c.appeal * 255) } } /* stats 는 앱이 안 써요(목록 2MB → 가볍게, 장면 매니페스트에 그대로) */
+  const keep = (s) => { const c = cur[s.id]; if (!c) { if (!(s.kind === 'synthetic' || s.g)) return null; const { stats, ...rest } = s; return rest } /* 채점 못 한 장면은 빼요 (안전) · 브리프 컷(만들 때 이미 채점 · g 있음)은 그대로 */; if (!verdict(c, cut).ok) return null; const { stats, ...rest } = s; return { ...rest, g: packFit(c.fit), ap: Math.round(c.appeal * 255), ...(c.aes != null ? { ae: Math.round(c.aes * 25) } : {}) } } /* ae = 미학 점수 × 25 (0~250) — 앱이 장르 안에서 높은 사진을 먼저 */ /* stats 는 앱이 안 써요(목록 2MB → 가볍게, 장면 매니페스트에 그대로) */
   const scenes = ix.scenes.map(keep).filter(Boolean), shots = (ix.shots || []).map(keep).filter(Boolean)
   const out = { ...ix, made: new Date().toISOString().slice(0, 10), curated: { cut, at: new Date().toISOString(), from: ix.scenes.length + (ix.shots || []).length }, count: scenes.length, scenes, shots }
   await wr(A.out || 'out/scenes/index.json', out); log('반영:', ix.scenes.length, '→', scenes.length, '장면 ·', (ix.shots || []).length, '→', shots.length, '컷')
