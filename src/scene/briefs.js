@@ -124,14 +124,17 @@ export function scoreScene(v, T, prompts = ALL_PROMPTS(), tech = null) {
   return { appeal: +(pa / Math.max(1e-9, pa + pp)).toFixed(3), plain: +pp.toFixed(3), rej: +rej.toFixed(3), rejK, genreMass: +pg.toFixed(3), fit, best: gk.reduce((a, g) => (fit[g] > (fit[a] ?? -1) ? g : a), gk[0]), ...craft }
 }
 /* 판정 (기본값은 Actions 의 검토 시트로 확인해 고쳐요): 거절 개념이 강하면 빼고, 감성이 낮거나 장르 쪽 확률이 너무 낮으면(어느 노래에도 안 어울림) 빼요 */
-export const CUT = { rej: 0.12, appeal: 0.55, genreMass: 0.25, close: 0.2, pro: 0.55, aes: 6.0, tech: TECH_CUT } /* 2차 시트: 미학 5.0~5.3 에 셀카 · 군중 얼굴 · 평범한 거리 · 위성 지도 → 5.5, 가까이 0.22~0.40 에 음식 노점 · 물건 → 0.25, 3차 시트 0.20~0.25 에 가게 앞 · 장식 앞 · 캐릭터 진열 → 0.20, 미학 5.5 → 6.0 (사용자: "잘 찍은 사진" 이상만, 2026-11-22) */ /* close · pro · aes: 작품성 (검토 시트로 정해요 · 옛 채점처럼 값이 없으면 그 검사는 건너뛰어요) */
+/* 장르별 미학 하한 (2026-11-22 사용자: "평균 미감 점수가 높은 장르일수록 평균이 더 높았으면") — 하한 6.25 + 1.5 × max(0, 수축 평균 − 전체 평균),
+   수축 평균 = (n · 장르 평균 + 30 · 전체 평균) / (n + 30) (사진이 적은 장르가 우연히 튀지 않게). 2224장 기준 전체 평균 6.88 에서 계산 — 노을 · 야경이 많은 장르는 더 엄격하게 */
+export const AES_G = { carol: 6.53, reggaeton: 6.45, boombap: 6.34, ballad: 6.34, rock: 6.29, kpop: 6.26 }
+export const CUT = { rej: 0.12, appeal: 0.55, genreMass: 0.25, close: 0.2, pro: 0.55, aes: 6.25, aesG: AES_G, tech: TECH_CUT } /* 2차 시트: 미학 5.0~5.3 에 셀카 · 군중 얼굴 · 평범한 거리 · 위성 지도 → 5.5, 가까이 0.22~0.40 에 음식 노점 · 물건 → 0.25, 3차 시트 0.20~0.25 에 가게 앞 · 장식 앞 · 캐릭터 진열 → 0.20, 미학 5.5 → 6.0 (사용자: "잘 찍은 사진" 이상만, 2026-11-22) */ /* close · pro · aes: 작품성 (검토 시트로 정해요 · 옛 채점처럼 값이 없으면 그 검사는 건너뛰어요) */
 export function verdict(sc, cut = CUT) {
   if (sc.rej >= cut.rej) return { ok: false, why: '불쾌 · 이상: ' + sc.rejK }
   if (sc.appeal < cut.appeal && !(cut.gmAlt != null && sc.genreMass >= cut.gmAlt)) return { ok: false, why: '평범 · 지루함' } /* gmAlt: 거리에서 찍은 사진이라 "평범" 쪽으로 기울어도 장르 분위기가 아주 강하면(밤 쇼핑 거리 · 네온) 살려요 */
   if (sc.genreMass < cut.genreMass) return { ok: false, why: '어느 장르 분위기와도 멀어요' }
   if (sc.close != null && cut.close != null && sc.close > cut.close) return { ok: false, why: '가까이 찍었어요 (클로즈업)' }
   if (sc.pro != null && cut.pro != null && sc.pro < cut.pro) return { ok: false, why: '작품성: 스냅 사진 같아요' }
-  if (sc.aes != null && cut.aes != null && sc.aes < cut.aes) return { ok: false, why: '작품성: 미학 점수가 낮아요' }
+  if (sc.aes != null && cut.aes != null && sc.aes < Math.max(cut.aes, (cut.aesG && cut.aesG[sc.best]) || 0)) return { ok: false, why: '작품성: 미학 점수가 낮아요' } /* 장르별 하한(aesG)은 가장 맞는 장르 기준 */
   if (sc.tech) { const t = techVerdict(sc.tech, cut.tech || TECH_CUT); if (!t.ok) return { ok: false, why: '작품성 · ' + t.why } }
   return { ok: true, why: '' }
 }
