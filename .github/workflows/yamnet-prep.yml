@@ -18,7 +18,7 @@ jobs:
       - name: 도구
         run: |
           sudo apt-get update -q && sudo apt-get install -y -q flite
-          pip install -q "numpy<2" tensorflow-cpu==2.15.1 tf2onnx==1.16.1 onnx==1.15.0 onnxruntime==1.17.3 scipy soundfile
+          pip install -q "numpy<2" tensorflow-cpu==2.15.1 tf_keras==2.15.1 tf2onnx==1.16.1 onnx==1.15.0 onnxruntime==1.17.3 scipy soundfile
       - name: 준비
         run: python scripts/yamnet-prep.py
       - name: 확인용 올리기

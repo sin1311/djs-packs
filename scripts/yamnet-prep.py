@@ -22,14 +22,15 @@ for f in ['params.py', 'yamnet.py', 'features.py', 'yamnet_class_map.csv', 'READ
 W = get('https://storage.googleapis.com/audioset/yamnet.h5'); open('yam/yamnet.h5', 'wb').write(W); print('가중치', len(W), sha(W))
 sys.path.insert(0, 'yam')
 import tensorflow as tf
+import tf_keras  # yamnet.py 가 tf_keras(Keras 2) 를 씀 — 같은 것으로
 import params as yparams, yamnet as ymodel, features as yfeat
 
 p = yparams.Params()
 print('params', {k: getattr(p, k) for k in ['sample_rate', 'stft_window_seconds', 'stft_hop_seconds', 'mel_bands', 'mel_min_hz', 'mel_max_hz', 'log_offset', 'patch_window_seconds', 'patch_hop_seconds', 'num_classes']})
 full = ymodel.yamnet_frames_model(p); full.load_weights('yam/yamnet.h5')
-inp = tf.keras.layers.Input(batch_shape=(None, 96, 64), name='patches')
+inp = tf_keras.layers.Input(batch_shape=(None, 96, 64), name='patches')
 pr, em = ymodel.yamnet(inp, p)
-core = tf.keras.Model(inp, [pr, em]); core.load_weights('yam/yamnet.h5')
+core = tf_keras.Model(inp, [pr, em]); core.load_weights('yam/yamnet.h5')
 
 # 결정적 시험 신호(앱 시험이 같은 식으로 만듦 — LCG 는 siglip-prep 과 같음)
 SR = 16000
