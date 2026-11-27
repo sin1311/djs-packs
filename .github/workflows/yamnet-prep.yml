@@ -1,0 +1,32 @@
+# stdio 24장 V8-1 YAMNet 준비 (사람/클로드가 시작): TF 원본(tensorflow/models research/audioset/yamnet · Apache-2.0) → 조각 입력 ONNX ·
+#  앱 전처리 확인용 기준값 · 어휘 521 이름 → models 가지에 더해요(다른 모델 파일은 그대로)
+name: yamnet-prep
+on:
+  workflow_dispatch:
+    inputs:
+      publish: { description: 'models 가지에 더할지 (false = 확인만)', default: 'true' }
+permissions:
+  contents: write
+jobs:
+  prep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - name: 도구
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q flite
+          pip install -q "numpy<2" tensorflow-cpu==2.15.1 tf2onnx==1.16.1 onnx==1.15.0 onnxruntime==1.17.3 scipy soundfile
+      - name: 준비
+        run: python scripts/yamnet-prep.py
+      - name: 확인용 올리기
+        uses: actions/upload-artifact@v4
+        with: { name: yamnet, path: models/yamnet-* }
+      - name: models 가지에 더하기
+        if: ${{ github.event.inputs.publish != 'false' }}
+        run: |
+          git config --global user.name 'github-actions[bot]'; git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git clone -q --depth 1 -b models "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" mb
+          cp models/yamnet* mb/ && cd mb && git add -A && git commit -q -m "YAMNet 준비물 (조각 입력 ONNX · 기준값 · 어휘 521)" && for k in 1 2 3 4; do git push origin models && break; sleep $((k * 15)); git pull -q --rebase origin models; done
