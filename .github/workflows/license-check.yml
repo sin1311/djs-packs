@@ -1,0 +1,27 @@
+# 모델 라이선스 원문 확인(사람이 시작): Hugging Face 모델 카드 · 메타데이터 · LICENSE 파일과 GitHub LICENSE 를 그대로 받아 licenses/<묶음>/ 에 커밋해요.
+#  앱 저장소 환경에선 huggingface.co 가 막혀 있어 여기서 받아요(stdio 24장 V3-2b · docs/direction/PHOTO_STORY_PLAN.md B-5).
+name: license-check
+on:
+  workflow_dispatch:
+    inputs:
+      group: { description: '묶음 이름(폴더)', default: 'vision' }
+      hf: { description: 'Hugging Face 모델(쉼표)', default: 'openai/clip-vit-base-patch32,Xenova/clip-vit-base-patch32,google/siglip-base-patch16-224,Xenova/siglip-base-patch16-224,apple/MobileCLIP-S0,microsoft/Florence-2-base,onnx-community/Florence-2-base-ft,HuggingFaceTB/SmolVLM-256M-Instruct,vikhyatk/moondream2,openai/whisper-tiny,onnx-community/whisper-tiny,MIT/ast-finetuned-audioset-10-10-0.4593,opencv/face_detection_yunet' }
+      gh: { description: 'GitHub LICENSE(owner/repo@ref:path, 쉼표)', default: 'tensorflow/models@master:LICENSE,naptha/tesseract.js@master:LICENSE,opencv/opencv_zoo@main:LICENSE,openai/CLIP@main:LICENSE,mlfoundations/open_clip@main:LICENSE' }
+permissions:
+  contents: write
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: 원문 받기
+        run: node scripts/license-check.mjs "${{ github.event.inputs.group }}" "${{ github.event.inputs.hf }}" "${{ github.event.inputs.gh }}"
+      - name: 커밋
+        run: |
+          git config user.name "djs-packs-bot"; git config user.email "actions@users.noreply.github.com"
+          git add licenses
+          git diff --cached --quiet || git commit -m "license-check: ${{ github.event.inputs.group }} 원문"
+          git pull --rebase origin main && git push origin HEAD:main
