@@ -1,0 +1,686 @@
+{
+ "v": 1,
+ "from": "stdio src/core/situfactors.js",
+ "items": [
+  {
+   "id": "place:beach",
+   "axis": "place",
+   "en": "This is a photo taken at a beach by the sea."
+  },
+  {
+   "id": "place:mountain",
+   "axis": "place",
+   "en": "This is a photo taken at a mountain."
+  },
+  {
+   "id": "place:forest",
+   "axis": "place",
+   "en": "This is a photo taken at a forest."
+  },
+  {
+   "id": "place:field",
+   "axis": "place",
+   "en": "This is a photo taken at a grass field or meadow."
+  },
+  {
+   "id": "place:lake",
+   "axis": "place",
+   "en": "This is a photo taken at a lake or river."
+  },
+  {
+   "id": "place:snowland",
+   "axis": "place",
+   "en": "This is a photo taken at a snowy landscape."
+  },
+  {
+   "id": "place:desert",
+   "axis": "place",
+   "en": "This is a photo taken at a desert."
+  },
+  {
+   "id": "place:street",
+   "axis": "place",
+   "en": "This is a photo taken at a city street."
+  },
+  {
+   "id": "place:alley",
+   "axis": "place",
+   "en": "This is a photo taken at a narrow old alley."
+  },
+  {
+   "id": "place:market",
+   "axis": "place",
+   "en": "This is a photo taken at a busy market."
+  },
+  {
+   "id": "place:rooftop",
+   "axis": "place",
+   "en": "This is a photo taken at a rooftop."
+  },
+  {
+   "id": "place:bridge",
+   "axis": "place",
+   "en": "This is a photo taken at a bridge."
+  },
+  {
+   "id": "place:park",
+   "axis": "place",
+   "en": "This is a photo taken at a city park."
+  },
+  {
+   "id": "place:playground",
+   "axis": "place",
+   "en": "This is a photo taken at a playground."
+  },
+  {
+   "id": "place:amusement",
+   "axis": "place",
+   "en": "This is a photo taken at an amusement park."
+  },
+  {
+   "id": "place:stadium",
+   "axis": "place",
+   "en": "This is a photo taken at a sports stadium."
+  },
+  {
+   "id": "place:stage",
+   "axis": "place",
+   "en": "This is a photo taken at a concert stage."
+  },
+  {
+   "id": "place:club",
+   "axis": "place",
+   "en": "This is a photo taken at a night club."
+  },
+  {
+   "id": "place:home",
+   "axis": "place",
+   "en": "This is a photo taken at inside a home living room."
+  },
+  {
+   "id": "place:kitchen",
+   "axis": "place",
+   "en": "This is a photo taken at a kitchen."
+  },
+  {
+   "id": "place:bedroom",
+   "axis": "place",
+   "en": "This is a photo taken at a bedroom."
+  },
+  {
+   "id": "place:cafe",
+   "axis": "place",
+   "en": "This is a photo taken at a cafe."
+  },
+  {
+   "id": "place:restaurant",
+   "axis": "place",
+   "en": "This is a photo taken at a restaurant."
+  },
+  {
+   "id": "place:bar",
+   "axis": "place",
+   "en": "This is a photo taken at a bar or pub."
+  },
+  {
+   "id": "place:office",
+   "axis": "place",
+   "en": "This is a photo taken at an office."
+  },
+  {
+   "id": "place:classroom",
+   "axis": "place",
+   "en": "This is a photo taken at a school classroom."
+  },
+  {
+   "id": "place:library",
+   "axis": "place",
+   "en": "This is a photo taken at a library."
+  },
+  {
+   "id": "place:hospital",
+   "axis": "place",
+   "en": "This is a photo taken at a hospital room."
+  },
+  {
+   "id": "place:church",
+   "axis": "place",
+   "en": "This is a photo taken at a church or chapel."
+  },
+  {
+   "id": "place:temple",
+   "axis": "place",
+   "en": "This is a photo taken at a traditional temple or palace."
+  },
+  {
+   "id": "place:museum",
+   "axis": "place",
+   "en": "This is a photo taken at a museum or gallery."
+  },
+  {
+   "id": "place:shop",
+   "axis": "place",
+   "en": "This is a photo taken at a shopping mall."
+  },
+  {
+   "id": "place:airport",
+   "axis": "place",
+   "en": "This is a photo taken at an airport."
+  },
+  {
+   "id": "place:station",
+   "axis": "place",
+   "en": "This is a photo taken at a train station."
+  },
+  {
+   "id": "place:train",
+   "axis": "place",
+   "en": "This is a photo taken at inside a train."
+  },
+  {
+   "id": "place:car",
+   "axis": "place",
+   "en": "This is a photo taken at inside a car."
+  },
+  {
+   "id": "place:road",
+   "axis": "place",
+   "en": "This is a photo taken at a highway or road."
+  },
+  {
+   "id": "place:boat",
+   "axis": "place",
+   "en": "This is a photo taken at a boat on the water."
+  },
+  {
+   "id": "place:pool",
+   "axis": "place",
+   "en": "This is a photo taken at a swimming pool."
+  },
+  {
+   "id": "place:campsite",
+   "axis": "place",
+   "en": "This is a photo taken at a campsite with tents."
+  },
+  {
+   "id": "place:farm",
+   "axis": "place",
+   "en": "This is a photo taken at a farm or countryside."
+  },
+  {
+   "id": "place:garden",
+   "axis": "place",
+   "en": "This is a photo taken at a flower garden."
+  },
+  {
+   "id": "place:gym",
+   "axis": "place",
+   "en": "This is a photo taken at a gym."
+  },
+  {
+   "id": "place:studio",
+   "axis": "place",
+   "en": "This is a photo taken at a music studio."
+  },
+  {
+   "id": "place:wedding_hall",
+   "axis": "place",
+   "en": "This is a photo taken at a wedding hall."
+  },
+  {
+   "id": "place:night_city",
+   "axis": "place",
+   "en": "This is a photo taken at a city at night with lights."
+  },
+  {
+   "id": "activity:eating",
+   "axis": "activity",
+   "en": "This is a photo of people eating a meal together."
+  },
+  {
+   "id": "activity:cooking",
+   "axis": "activity",
+   "en": "This is a photo of people cooking food."
+  },
+  {
+   "id": "activity:drinking",
+   "axis": "activity",
+   "en": "This is a photo of people drinking and toasting."
+  },
+  {
+   "id": "activity:talking",
+   "axis": "activity",
+   "en": "This is a photo of people talking and laughing."
+  },
+  {
+   "id": "activity:dancing",
+   "axis": "activity",
+   "en": "This is a photo of people dancing."
+  },
+  {
+   "id": "activity:singing",
+   "axis": "activity",
+   "en": "This is a photo of people singing."
+  },
+  {
+   "id": "activity:playing_music",
+   "axis": "activity",
+   "en": "This is a photo of people playing musical instruments."
+  },
+  {
+   "id": "activity:cheering",
+   "axis": "activity",
+   "en": "This is a photo of people cheering and clapping."
+  },
+  {
+   "id": "activity:running",
+   "axis": "activity",
+   "en": "This is a photo of people running a race."
+  },
+  {
+   "id": "activity:cycling",
+   "axis": "activity",
+   "en": "This is a photo of people riding bicycles."
+  },
+  {
+   "id": "activity:hiking",
+   "axis": "activity",
+   "en": "This is a photo of people hiking."
+  },
+  {
+   "id": "activity:swimming",
+   "axis": "activity",
+   "en": "This is a photo of people swimming."
+  },
+  {
+   "id": "activity:surfing",
+   "axis": "activity",
+   "en": "This is a photo of people surfing."
+  },
+  {
+   "id": "activity:skiing",
+   "axis": "activity",
+   "en": "This is a photo of people skiing or snowboarding."
+  },
+  {
+   "id": "activity:playing_sports",
+   "axis": "activity",
+   "en": "This is a photo of people playing a ball game."
+  },
+  {
+   "id": "activity:working_out",
+   "axis": "activity",
+   "en": "This is a photo of people working out."
+  },
+  {
+   "id": "activity:walking",
+   "axis": "activity",
+   "en": "This is a photo of people walking."
+  },
+  {
+   "id": "activity:sightseeing",
+   "axis": "activity",
+   "en": "This is a photo of people sightseeing as tourists."
+  },
+  {
+   "id": "activity:shopping",
+   "axis": "activity",
+   "en": "This is a photo of people shopping."
+  },
+  {
+   "id": "activity:working",
+   "axis": "activity",
+   "en": "This is a photo of people working on computers."
+  },
+  {
+   "id": "activity:studying",
+   "axis": "activity",
+   "en": "This is a photo of people studying with books."
+  },
+  {
+   "id": "activity:reading",
+   "axis": "activity",
+   "en": "This is a photo of people reading."
+  },
+  {
+   "id": "activity:resting",
+   "axis": "activity",
+   "en": "This is a photo of people resting and relaxing."
+  },
+  {
+   "id": "activity:sleeping",
+   "axis": "activity",
+   "en": "This is a photo of people sleeping."
+  },
+  {
+   "id": "activity:playing_kids",
+   "axis": "activity",
+   "en": "This is a photo of people children playing."
+  },
+  {
+   "id": "activity:playing_games",
+   "axis": "activity",
+   "en": "This is a photo of people playing video games."
+  },
+  {
+   "id": "activity:driving",
+   "axis": "activity",
+   "en": "This is a photo of people driving a car."
+  },
+  {
+   "id": "activity:posing",
+   "axis": "activity",
+   "en": "This is a photo of people posing for a group photo."
+  },
+  {
+   "id": "activity:hugging",
+   "axis": "activity",
+   "en": "This is a photo of people hugging each other."
+  },
+  {
+   "id": "activity:crying",
+   "axis": "activity",
+   "en": "This is a photo of people crying."
+  },
+  {
+   "id": "activity:praying",
+   "axis": "activity",
+   "en": "This is a photo of people praying."
+  },
+  {
+   "id": "activity:performing",
+   "axis": "activity",
+   "en": "This is a photo of people performing on stage."
+  },
+  {
+   "id": "activity:marching",
+   "axis": "activity",
+   "en": "This is a photo of people marching in a parade."
+  },
+  {
+   "id": "activity:fishing",
+   "axis": "activity",
+   "en": "This is a photo of people fishing."
+  },
+  {
+   "id": "activity:gardening",
+   "axis": "activity",
+   "en": "This is a photo of people gardening."
+  },
+  {
+   "id": "activity:painting",
+   "axis": "activity",
+   "en": "This is a photo of people painting or drawing."
+  },
+  {
+   "id": "activity:waiting",
+   "axis": "activity",
+   "en": "This is a photo of people waiting in line."
+  },
+  {
+   "id": "activity:celebrating",
+   "axis": "activity",
+   "en": "This is a photo of people celebrating."
+  },
+  {
+   "id": "event:birthday",
+   "axis": "event",
+   "en": "This is a photo of a birthday celebration."
+  },
+  {
+   "id": "event:first_birthday",
+   "axis": "event",
+   "en": "This is a photo of a baby's first birthday party."
+  },
+  {
+   "id": "event:elder_birthday",
+   "axis": "event",
+   "en": "This is a photo of an elderly person's birthday banquet."
+  },
+  {
+   "id": "event:wedding",
+   "axis": "event",
+   "en": "This is a photo of a wedding."
+  },
+  {
+   "id": "event:proposal",
+   "axis": "event",
+   "en": "This is a photo of a marriage proposal."
+  },
+  {
+   "id": "event:graduation",
+   "axis": "event",
+   "en": "This is a photo of a graduation ceremony."
+  },
+  {
+   "id": "event:entrance",
+   "axis": "event",
+   "en": "This is a photo of a school entrance ceremony."
+  },
+  {
+   "id": "event:farewell",
+   "axis": "event",
+   "en": "This is a photo of a farewell party."
+  },
+  {
+   "id": "event:reunion",
+   "axis": "event",
+   "en": "This is a photo of a reunion of old friends."
+  },
+  {
+   "id": "event:funeral",
+   "axis": "event",
+   "en": "This is a photo of a funeral or memorial."
+  },
+  {
+   "id": "event:christmas",
+   "axis": "event",
+   "en": "This is a photo of christmas."
+  },
+  {
+   "id": "event:newyear",
+   "axis": "event",
+   "en": "This is a photo of new year celebration."
+  },
+  {
+   "id": "event:lunar_holiday",
+   "axis": "event",
+   "en": "This is a photo of a traditional korean holiday family gathering."
+  },
+  {
+   "id": "event:halloween",
+   "axis": "event",
+   "en": "This is a photo of halloween."
+  },
+  {
+   "id": "event:concert",
+   "axis": "event",
+   "en": "This is a photo of a concert."
+  },
+  {
+   "id": "event:festival",
+   "axis": "event",
+   "en": "This is a photo of a festival."
+  },
+  {
+   "id": "event:fireworks",
+   "axis": "event",
+   "en": "This is a photo of fireworks."
+  },
+  {
+   "id": "event:sports_match",
+   "axis": "event",
+   "en": "This is a photo of a sports match."
+  },
+  {
+   "id": "event:marathon",
+   "axis": "event",
+   "en": "This is a photo of a marathon race."
+  },
+  {
+   "id": "event:party",
+   "axis": "event",
+   "en": "This is a photo of a party."
+  },
+  {
+   "id": "event:picnic",
+   "axis": "event",
+   "en": "This is a photo of a picnic."
+  },
+  {
+   "id": "event:trip",
+   "axis": "event",
+   "en": "This is a photo of a travel trip."
+  },
+  {
+   "id": "event:date",
+   "axis": "event",
+   "en": "This is a photo of a romantic date."
+  },
+  {
+   "id": "event:family_day",
+   "axis": "event",
+   "en": "This is a photo of a family outing."
+  },
+  {
+   "id": "event:pet_day",
+   "axis": "event",
+   "en": "This is a photo of a day with a pet."
+  },
+  {
+   "id": "event:moving",
+   "axis": "event",
+   "en": "This is a photo of moving into a new home."
+  },
+  {
+   "id": "event:protest",
+   "axis": "event",
+   "en": "This is a photo of a public rally."
+  },
+  {
+   "id": "event:ordinary_day",
+   "axis": "event",
+   "en": "This is a photo of an ordinary day."
+  },
+  {
+   "id": "event:busking",
+   "axis": "event",
+   "en": "This is a photo of street musicians busking."
+  },
+  {
+   "id": "people:nobody",
+   "axis": "people",
+   "en": "This is a photo of a scene with no people."
+  },
+  {
+   "id": "people:alone",
+   "axis": "people",
+   "en": "This is a photo of one person alone."
+  },
+  {
+   "id": "people:couple",
+   "axis": "people",
+   "en": "This is a photo of a couple."
+  },
+  {
+   "id": "people:friends",
+   "axis": "people",
+   "en": "This is a photo of a small group of friends."
+  },
+  {
+   "id": "people:family",
+   "axis": "people",
+   "en": "This is a photo of a family with children."
+  },
+  {
+   "id": "people:crowd",
+   "axis": "people",
+   "en": "This is a photo of a large crowd."
+  },
+  {
+   "id": "people:kids",
+   "axis": "people",
+   "en": "This is a photo of young children."
+  },
+  {
+   "id": "people:elders",
+   "axis": "people",
+   "en": "This is a photo of elderly people."
+  },
+  {
+   "id": "people:baby",
+   "axis": "people",
+   "en": "This is a photo of a baby."
+  },
+  {
+   "id": "people:pet",
+   "axis": "people",
+   "en": "This is a photo of a pet animal."
+  },
+  {
+   "id": "time:morning",
+   "axis": "time",
+   "en": "This is a photo taken in the early morning."
+  },
+  {
+   "id": "time:noon",
+   "axis": "time",
+   "en": "This is a photo taken in bright daylight."
+  },
+  {
+   "id": "time:sunset",
+   "axis": "time",
+   "en": "This is a photo taken at sunset."
+  },
+  {
+   "id": "time:night",
+   "axis": "time",
+   "en": "This is a photo taken at night."
+  },
+  {
+   "id": "time:rain",
+   "axis": "time",
+   "en": "This is a photo taken on a rainy day."
+  },
+  {
+   "id": "time:snowfall",
+   "axis": "time",
+   "en": "This is a photo taken while snow is falling."
+  },
+  {
+   "id": "time:fog",
+   "axis": "time",
+   "en": "This is a photo taken on a foggy day."
+  },
+  {
+   "id": "time:storm",
+   "axis": "time",
+   "en": "This is a photo taken during a storm."
+  },
+  {
+   "id": "time:spring",
+   "axis": "time",
+   "en": "This is a photo taken in spring with blossoms."
+  },
+  {
+   "id": "time:summer",
+   "axis": "time",
+   "en": "This is a photo taken in hot summer."
+  },
+  {
+   "id": "time:autumn",
+   "axis": "time",
+   "en": "This is a photo taken in autumn with fall leaves."
+  },
+  {
+   "id": "time:winter",
+   "axis": "time",
+   "en": "This is a photo taken in cold winter."
+  },
+  {
+   "id": "time:indoor_light",
+   "axis": "time",
+   "en": "This is a photo taken indoors under warm lights."
+  }
+ ]
+}
