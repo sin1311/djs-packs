@@ -1,0 +1,30 @@
+# stdio 24장 V3-2d 상황 읽기 실측 (사람/클로드가 시작): 모은 실제 사진 ~2,172장을 앱과 같은 SigLIP 사진 쪽 int8 · 같은 글 임베딩으로 읽어 축별 적중률 · 모름 문턱 쓸기 → eval/ 커밋
+name: situ-eval
+on:
+  workflow_dispatch:
+    inputs:
+      n: { description: '잴 사진 수 (0 = 전부)', default: '0' }
+permissions:
+  contents: write
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: 도구 · 장면 목록
+        run: |
+          npm init -y > /dev/null
+          npm pkg set type=module
+          ONNXRUNTIME_NODE_INSTALL_CUDA=skip npm i @huggingface/transformers@3.1.2
+          git clone -q --depth 1 -b scenes "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" .scn
+      - name: 재기
+        env: { N: '${{ github.event.inputs.n }}' }
+        run: node scripts/situ-eval.mjs
+      - name: 커밋
+        run: |
+          git config user.name "djs-packs-bot"; git config user.email "actions@users.noreply.github.com"
+          git add eval && (git diff --cached --quiet || git commit -q -m "situ-eval: 상황 읽기 실측")
+          for k in 1 2 3; do git pull -q --rebase origin main && git push -q origin HEAD:main && break; sleep 5; done
