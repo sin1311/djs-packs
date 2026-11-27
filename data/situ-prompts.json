@@ -1,0 +1,314 @@
+{
+ "v": 1,
+ "from": "stdio src/core/situvocab.js",
+ "items": [
+  {
+   "id": "birthday",
+   "en": "a birthday party with a cake and candles"
+  },
+  {
+   "id": "wedding",
+   "en": "a wedding ceremony with a bride and groom"
+  },
+  {
+   "id": "graduation",
+   "en": "a graduation ceremony with caps and gowns"
+  },
+  {
+   "id": "concert",
+   "en": "a crowded concert with stage lights"
+  },
+  {
+   "id": "festival",
+   "en": "an outdoor music festival with a crowd"
+  },
+  {
+   "id": "party",
+   "en": "friends at a house party at night"
+  },
+  {
+   "id": "christmas",
+   "en": "a christmas tree with lights and presents"
+  },
+  {
+   "id": "newyear",
+   "en": "new year fireworks over a city"
+  },
+  {
+   "id": "halloween",
+   "en": "a halloween party with costumes and pumpkins"
+  },
+  {
+   "id": "sports",
+   "en": "people cheering at a sports game in a stadium"
+  },
+  {
+   "id": "family_dinner",
+   "en": "a family having dinner together at a table"
+  },
+  {
+   "id": "holiday_family",
+   "en": "a family gathering for a traditional holiday"
+  },
+  {
+   "id": "picnic",
+   "en": "a picnic on the grass in a park"
+  },
+  {
+   "id": "bbq",
+   "en": "friends having a barbecue outdoors"
+  },
+  {
+   "id": "baby_first",
+   "en": "a newborn baby sleeping"
+  },
+  {
+   "id": "anniversary",
+   "en": "a couple celebrating an anniversary dinner"
+  },
+  {
+   "id": "travel",
+   "en": "tourists sightseeing on a trip"
+  },
+  {
+   "id": "beach_day",
+   "en": "a sunny beach with waves and blue sky"
+  },
+  {
+   "id": "beach_sunset",
+   "en": "a beach at sunset with orange sky"
+  },
+  {
+   "id": "surfing",
+   "en": "a person surfing on a wave"
+  },
+  {
+   "id": "mountain",
+   "en": "hiking on a mountain trail with a view"
+  },
+  {
+   "id": "forest",
+   "en": "a quiet forest path with tall trees"
+  },
+  {
+   "id": "lake",
+   "en": "a calm lake surrounded by mountains"
+  },
+  {
+   "id": "river_city",
+   "en": "a city river at night with bridges and lights"
+  },
+  {
+   "id": "city_day",
+   "en": "a busy city street during the day"
+  },
+  {
+   "id": "city_night",
+   "en": "city streets at night with neon signs"
+  },
+  {
+   "id": "night_market",
+   "en": "a night market with food stalls and lanterns"
+  },
+  {
+   "id": "cafe",
+   "en": "a cozy cafe with coffee on a wooden table"
+  },
+  {
+   "id": "restaurant",
+   "en": "a nice restaurant dinner with plates of food"
+  },
+  {
+   "id": "food_closeup",
+   "en": "a close up photo of delicious food"
+  },
+  {
+   "id": "airport",
+   "en": "an airport terminal with airplanes"
+  },
+  {
+   "id": "train",
+   "en": "a view from a train window"
+  },
+  {
+   "id": "roadtrip",
+   "en": "a road trip with a car on a highway"
+  },
+  {
+   "id": "camping",
+   "en": "camping with a tent and campfire at night"
+  },
+  {
+   "id": "snow",
+   "en": "a snowy landscape with snow falling"
+  },
+  {
+   "id": "ski",
+   "en": "people skiing on a snowy slope"
+  },
+  {
+   "id": "desert",
+   "en": "a desert with sand dunes"
+  },
+  {
+   "id": "temple",
+   "en": "an old temple or palace with traditional architecture"
+  },
+  {
+   "id": "museum",
+   "en": "people looking at art in a museum"
+  },
+  {
+   "id": "amusement",
+   "en": "an amusement park with a roller coaster"
+  },
+  {
+   "id": "rooftop",
+   "en": "a rooftop at dusk overlooking the city"
+  },
+  {
+   "id": "rice_field",
+   "en": "green rice fields in the countryside"
+  },
+  {
+   "id": "waterfall",
+   "en": "a waterfall in a green valley"
+  },
+  {
+   "id": "island",
+   "en": "a tropical island with palm trees"
+  },
+  {
+   "id": "home_relax",
+   "en": "relaxing at home on a sofa"
+  },
+  {
+   "id": "cooking",
+   "en": "cooking in a kitchen"
+  },
+  {
+   "id": "studying",
+   "en": "studying at a desk with books"
+  },
+  {
+   "id": "working",
+   "en": "working on a laptop in an office"
+  },
+  {
+   "id": "commute",
+   "en": "a crowded subway during commute"
+  },
+  {
+   "id": "school",
+   "en": "students in a school classroom"
+  },
+  {
+   "id": "friends_group",
+   "en": "a group of friends smiling together"
+  },
+  {
+   "id": "couple",
+   "en": "a couple holding hands on a date"
+  },
+  {
+   "id": "selfie",
+   "en": "a selfie of a smiling person"
+  },
+  {
+   "id": "kids_play",
+   "en": "children playing in a playground"
+  },
+  {
+   "id": "elderly",
+   "en": "grandparents with their grandchildren"
+  },
+  {
+   "id": "dog",
+   "en": "a happy dog playing outside"
+  },
+  {
+   "id": "cat",
+   "en": "a cat sleeping in the sun"
+  },
+  {
+   "id": "running",
+   "en": "a person running outdoors"
+  },
+  {
+   "id": "cycling",
+   "en": "cycling along a river path"
+  },
+  {
+   "id": "gym",
+   "en": "working out in a gym"
+  },
+  {
+   "id": "dance",
+   "en": "people dancing at a club"
+  },
+  {
+   "id": "music_play",
+   "en": "a person playing guitar or piano"
+  },
+  {
+   "id": "gaming",
+   "en": "playing video games at night"
+  },
+  {
+   "id": "shopping",
+   "en": "shopping in a mall or street shops"
+  },
+  {
+   "id": "reading",
+   "en": "reading a book by a window"
+  },
+  {
+   "id": "rain_window",
+   "en": "raindrops on a window"
+  },
+  {
+   "id": "storm",
+   "en": "a dark stormy sky with lightning"
+  },
+  {
+   "id": "fog",
+   "en": "a foggy morning landscape"
+  },
+  {
+   "id": "sunrise",
+   "en": "sunrise over the horizon"
+  },
+  {
+   "id": "stars",
+   "en": "a starry night sky"
+  },
+  {
+   "id": "cherry",
+   "en": "cherry blossoms in spring"
+  },
+  {
+   "id": "autumn",
+   "en": "autumn leaves in red and yellow"
+  },
+  {
+   "id": "summer_heat",
+   "en": "a hot summer day with bright sun"
+  },
+  {
+   "id": "winter_city",
+   "en": "a winter city street with lights"
+  },
+  {
+   "id": "old_photo",
+   "en": "an old faded photograph"
+  },
+  {
+   "id": "hometown",
+   "en": "a small hometown street"
+  },
+  {
+   "id": "farewell",
+   "en": "people saying goodbye at a station"
+  }
+ ]
+}
