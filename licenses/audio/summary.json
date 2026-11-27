@@ -1,0 +1,113 @@
+{
+  "at": "2026-11-27T18:09:03.688Z",
+  "rows": [
+    {
+      "id": "openai/whisper-tiny",
+      "src": "hf",
+      "ok": true,
+      "license": "apache-2.0",
+      "tags": "license:apache-2.0",
+      "licenseFiles": [],
+      "onnx": 0,
+      "gated": false,
+      "params": 37760640
+    },
+    {
+      "id": "onnx-community/whisper-tiny",
+      "src": "hf",
+      "ok": true,
+      "license": null,
+      "tags": "",
+      "licenseFiles": [],
+      "onnx": 28,
+      "gated": false,
+      "params": null
+    },
+    {
+      "id": "openai/whisper-base",
+      "src": "hf",
+      "ok": true,
+      "license": "apache-2.0",
+      "tags": "license:apache-2.0",
+      "licenseFiles": [],
+      "onnx": 0,
+      "gated": false,
+      "params": 72593920
+    },
+    {
+      "id": "onnx-community/whisper-base",
+      "src": "hf",
+      "ok": true,
+      "license": "apache-2.0",
+      "tags": "license:apache-2.0",
+      "licenseFiles": [],
+      "onnx": 28,
+      "gated": false,
+      "params": null
+    },
+    {
+      "id": "openai/whisper-small",
+      "src": "hf",
+      "ok": true,
+      "license": "apache-2.0",
+      "tags": "license:apache-2.0",
+      "licenseFiles": [],
+      "onnx": 0,
+      "gated": false,
+      "params": 241734912
+    },
+    {
+      "id": "onnx-community/whisper-small",
+      "src": "hf",
+      "ok": true,
+      "license": null,
+      "tags": "",
+      "licenseFiles": [],
+      "onnx": 28,
+      "gated": false,
+      "params": null
+    },
+    {
+      "id": "tensorflow/models",
+      "src": "github",
+      "ok": true,
+      "path": "research/audioset/yamnet/README.md",
+      "firstLine": "# YAMNet"
+    },
+    {
+      "id": "tensorflow/models",
+      "src": "github",
+      "ok": true,
+      "path": "LICENSE",
+      "firstLine": "Copyright 2022 Google LLC. All rights reserved."
+    },
+    {
+      "id": "audioset/ontology",
+      "src": "github",
+      "ok": true,
+      "path": "README.md",
+      "firstLine": "# Audio Set Ontology"
+    },
+    {
+      "id": "audioset/ontology",
+      "src": "github",
+      "ok": false,
+      "path": "LICENSE",
+      "firstLine": null
+    },
+    {
+      "id": "openai/whisper",
+      "src": "github",
+      "ok": true,
+      "path": "LICENSE",
+      "firstLine": "MIT License"
+    },
+    {
+      "id": "openai/whisper",
+      "src": "github",
+      "ok": true,
+      "path": "model-card.md",
+      "firstLine": "# Model Card: Whisper"
+    }
+  ]
+}

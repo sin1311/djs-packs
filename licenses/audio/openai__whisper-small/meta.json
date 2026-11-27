@@ -1,0 +1,33 @@
+{
+  "id": "openai/whisper-small",
+  "license": "apache-2.0",
+  "licenseTags": [
+    "license:apache-2.0"
+  ],
+  "licenseName": null,
+  "gated": false,
+  "pipeline": "automatic-speech-recognition",
+  "params": 241734912,
+  "datasets": null,
+  "onnx": [],
+  "files": [
+    ".gitattributes",
+    "README.md",
+    "added_tokens.json",
+    "config.json",
+    "flax_model.msgpack",
+    "generation_config.json",
+    "merges.txt",
+    "model.safetensors",
+    "normalizer.json",
+    "preprocessor_config.json",
+    "pytorch_model.bin",
+    "special_tokens_map.json",
+    "tf_model.h5",
+    "tokenizer.json",
+    "tokenizer_config.json",
+    "vocab.json"
+  ],
+  "sha": "973afd24965f72e36ca33b3055d56a652f456b4d",
+  "lastModified": "2024-02-29T10:57:38.000Z"
+}
