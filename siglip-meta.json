@@ -1,0 +1,149 @@
+{
+ "model": "Xenova/siglip-base-patch16-224",
+ "upstream": "google/siglip-base-patch16-224",
+ "license": {
+  "google": "apache-2.0"
+ },
+ "files": [
+  {
+   "f": "config.json",
+   "mb": 0
+  },
+  {
+   "f": "onnx/model.onnx",
+   "mb": 775.5
+  },
+  {
+   "f": "onnx/model_bnb4.onnx",
+   "mb": 197.4
+  },
+  {
+   "f": "onnx/model_fp16.onnx",
+   "mb": 388.2
+  },
+  {
+   "f": "onnx/model_q4.onnx",
+   "mb": 207.9
+  },
+  {
+   "f": "onnx/model_q4f16.onnx",
+   "mb": 146.2
+  },
+  {
+   "f": "onnx/model_quantized.onnx",
+   "mb": 201.2
+  },
+  {
+   "f": "onnx/model_uint8.onnx",
+   "mb": 195.6
+  },
+  {
+   "f": "onnx/text_model.onnx",
+   "mb": 420.9
+  },
+  {
+   "f": "onnx/text_model_bnb4.onnx",
+   "mb": 142.5
+  },
+  {
+   "f": "onnx/text_model_fp16.onnx",
+   "mb": 210.6
+  },
+  {
+   "f": "onnx/text_model_int8.onnx",
+   "mb": 105.8
+  },
+  {
+   "f": "onnx/text_model_q4.onnx",
+   "mb": 147.5
+  },
+  {
+   "f": "onnx/text_model_q4f16.onnx",
+   "mb": 94.1
+  },
+  {
+   "f": "onnx/text_model_quantized.onnx",
+   "mb": 106.3
+  },
+  {
+   "f": "onnx/text_model_uint8.onnx",
+   "mb": 105.8
+  },
+  {
+   "f": "onnx/vision_model.onnx",
+   "mb": 354.6
+  },
+  {
+   "f": "onnx/vision_model_bnb4.onnx",
+   "mb": 54.9
+  },
+  {
+   "f": "onnx/vision_model_fp16.onnx",
+   "mb": 177.5
+  },
+  {
+   "f": "onnx/vision_model_int8.onnx",
+   "mb": 89.7
+  },
+  {
+   "f": "onnx/vision_model_q4.onnx",
+   "mb": 60.3
+  },
+  {
+   "f": "onnx/vision_model_q4f16.onnx",
+   "mb": 52.1
+  },
+  {
+   "f": "onnx/vision_model_quantized.onnx",
+   "mb": 94.9
+  },
+  {
+   "f": "onnx/vision_model_uint8.onnx",
+   "mb": 89.7
+  },
+  {
+   "f": "preprocessor_config.json",
+   "mb": 0
+  },
+  {
+   "f": "quantize_config.json",
+   "mb": 0
+  },
+  {
+   "f": "special_tokens_map.json",
+   "mb": 0
+  },
+  {
+   "f": "tokenizer.json",
+   "mb": 2.3
+  },
+  {
+   "f": "tokenizer_config.json",
+   "mb": 0
+  }
+ ],
+ "visionFile": "onnx/vision_model_quantized.onnx",
+ "parts": [
+  {
+   "f": "siglip-vision-q.part0",
+   "sha": "003799ee93b1728ab05839972b95503260f5911379dbad7446f5eddf5a349feb",
+   "size": 47185920
+  },
+  {
+   "f": "siglip-vision-q.part1",
+   "sha": "0e642f7769f44cc360c16ec971b0c0af8187e8100ec27a385e16f4259589bc97",
+   "size": 47185920
+  },
+  {
+   "f": "siglip-vision-q.part2",
+   "sha": "51f0c9466f1d545cbfe145a85c9faeff6a53a83050529206ff98abde85b64bd1",
+   "size": 5127289
+  }
+ ],
+ "sha": {
+  "whole": "ef14a954f3d57e1806666432bd9785004c1dc27100aa260eee0cb0f10a5de058",
+  "siglip-situ.json": "e001a11e2e030bf17a62fc6d54553f626040f83dfaebac61aa748ca02d297448",
+  "siglip-ref.json": "aada3ef7445062ddc61ada7db6cd6813345642dc0d4a56f34570be6591bf7ddd"
+ },
+ "size": 99499129
+}
