@@ -1,0 +1,27 @@
+{
+  "id": "google/siglip-base-patch16-224",
+  "license": "apache-2.0",
+  "licenseTags": [
+    "license:apache-2.0"
+  ],
+  "licenseName": null,
+  "gated": false,
+  "pipeline": "zero-shot-image-classification",
+  "params": 203155970,
+  "datasets": null,
+  "onnx": [],
+  "files": [
+    ".gitattributes",
+    "README.md",
+    "config.json",
+    "model.safetensors",
+    "preprocessor_config.json",
+    "pytorch_model.bin",
+    "special_tokens_map.json",
+    "spiece.model",
+    "tokenizer.json",
+    "tokenizer_config.json"
+  ],
+  "sha": "7fd15f0689c79d79e38b1c2e2e2370a7bf2761ed",
+  "lastModified": "2024-09-26T08:20:18.000Z"
+}

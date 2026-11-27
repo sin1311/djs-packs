@@ -1,0 +1,27 @@
+{
+  "id": "openai/clip-vit-base-patch32",
+  "license": null,
+  "licenseTags": [],
+  "licenseName": null,
+  "gated": false,
+  "pipeline": "zero-shot-image-classification",
+  "params": null,
+  "datasets": null,
+  "onnx": [],
+  "files": [
+    ".gitattributes",
+    "README.md",
+    "config.json",
+    "flax_model.msgpack",
+    "merges.txt",
+    "preprocessor_config.json",
+    "pytorch_model.bin",
+    "special_tokens_map.json",
+    "tf_model.h5",
+    "tokenizer.json",
+    "tokenizer_config.json",
+    "vocab.json"
+  ],
+  "sha": "3d74acf9a28c67741b2f4f2ea7635f0aaf6f0268",
+  "lastModified": "2024-02-29T09:45:55.000Z"
+}

@@ -1,0 +1,32 @@
+{
+  "id": "opencv/face_detection_yunet",
+  "license": null,
+  "licenseTags": [],
+  "licenseName": null,
+  "gated": false,
+  "pipeline": null,
+  "params": null,
+  "datasets": null,
+  "onnx": [
+    "face_detection_yunet_2023mar.onnx",
+    "face_detection_yunet_2023mar_int8.onnx",
+    "face_detection_yunet_2023mar_int8bq.onnx"
+  ],
+  "files": [
+    ".gitattributes",
+    ".gitignore",
+    "CMakeLists.txt",
+    "LICENSE",
+    "README.md",
+    "demo.cpp",
+    "demo.py",
+    "example_outputs/largest_selfie.jpg",
+    "example_outputs/yunet_demo.gif",
+    "face_detection_yunet_2023mar.onnx",
+    "face_detection_yunet_2023mar_int8.onnx",
+    "face_detection_yunet_2023mar_int8bq.onnx",
+    "yunet.py"
+  ],
+  "sha": "3cc26e7f1014a5ee5d74a42acee58bafc9d0a310",
+  "lastModified": "2025-06-20T13:07:52.000Z"
+}

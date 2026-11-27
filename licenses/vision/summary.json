@@ -1,0 +1,189 @@
+{
+  "at": "2026-11-27T07:07:39.110Z",
+  "rows": [
+    {
+      "id": "openai/clip-vit-base-patch32",
+      "src": "hf",
+      "ok": true,
+      "license": null,
+      "tags": "",
+      "licenseFiles": [],
+      "onnx": 0,
+      "gated": false,
+      "params": null
+    },
+    {
+      "id": "Xenova/clip-vit-base-patch32",
+      "src": "hf",
+      "ok": true,
+      "license": "mit",
+      "tags": "license:mit",
+      "licenseFiles": [],
+      "onnx": 23,
+      "gated": false,
+      "params": null
+    },
+    {
+      "id": "google/siglip-base-patch16-224",
+      "src": "hf",
+      "ok": true,
+      "license": "apache-2.0",
+      "tags": "license:apache-2.0",
+      "licenseFiles": [],
+      "onnx": 0,
+      "gated": false,
+      "params": 203155970
+    },
+    {
+      "id": "Xenova/siglip-base-patch16-224",
+      "src": "hf",
+      "ok": true,
+      "license": null,
+      "tags": "",
+      "licenseFiles": [],
+      "onnx": 23,
+      "gated": false,
+      "params": null
+    },
+    {
+      "id": "apple/MobileCLIP-S0",
+      "src": "hf",
+      "ok": true,
+      "license": "apple-amlr",
+      "tags": "license:apple-amlr",
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "onnx": 0,
+      "gated": false,
+      "params": null
+    },
+    {
+      "id": "microsoft/Florence-2-base",
+      "src": "hf",
+      "ok": true,
+      "license": "mit",
+      "tags": "license:mit",
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "onnx": 0,
+      "gated": false,
+      "params": 231567705
+    },
+    {
+      "id": "onnx-community/Florence-2-base-ft",
+      "src": "hf",
+      "ok": true,
+      "license": "mit",
+      "tags": "license:mit",
+      "licenseFiles": [],
+      "onnx": 48,
+      "gated": false,
+      "params": null
+    },
+    {
+      "id": "HuggingFaceTB/SmolVLM-256M-Instruct",
+      "src": "hf",
+      "ok": true,
+      "license": "apache-2.0",
+      "tags": "license:apache-2.0",
+      "licenseFiles": [],
+      "onnx": 24,
+      "gated": false,
+      "params": 256484928
+    },
+    {
+      "id": "vikhyatk/moondream2",
+      "src": "hf",
+      "ok": true,
+      "license": "apache-2.0",
+      "tags": "license:apache-2.0",
+      "licenseFiles": [],
+      "onnx": 0,
+      "gated": false,
+      "params": 1927237104
+    },
+    {
+      "id": "openai/whisper-tiny",
+      "src": "hf",
+      "ok": true,
+      "license": "apache-2.0",
+      "tags": "license:apache-2.0",
+      "licenseFiles": [],
+      "onnx": 0,
+      "gated": false,
+      "params": 37760640
+    },
+    {
+      "id": "onnx-community/whisper-tiny",
+      "src": "hf",
+      "ok": true,
+      "license": null,
+      "tags": "",
+      "licenseFiles": [],
+      "onnx": 28,
+      "gated": false,
+      "params": null
+    },
+    {
+      "id": "MIT/ast-finetuned-audioset-10-10-0.4593",
+      "src": "hf",
+      "ok": true,
+      "license": "bsd-3-clause",
+      "tags": "license:bsd-3-clause",
+      "licenseFiles": [],
+      "onnx": 0,
+      "gated": false,
+      "params": 86594063
+    },
+    {
+      "id": "opencv/face_detection_yunet",
+      "src": "hf",
+      "ok": true,
+      "license": null,
+      "tags": "",
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "onnx": 3,
+      "gated": false,
+      "params": null
+    },
+    {
+      "id": "tensorflow/models",
+      "src": "github",
+      "ok": true,
+      "path": "LICENSE",
+      "firstLine": "Copyright 2022 Google LLC. All rights reserved."
+    },
+    {
+      "id": "naptha/tesseract.js",
+      "src": "github",
+      "ok": false,
+      "path": "LICENSE",
+      "firstLine": null
+    },
+    {
+      "id": "opencv/opencv_zoo",
+      "src": "github",
+      "ok": true,
+      "path": "LICENSE",
+      "firstLine": "Apache License"
+    },
+    {
+      "id": "openai/CLIP",
+      "src": "github",
+      "ok": true,
+      "path": "LICENSE",
+      "firstLine": "MIT License"
+    },
+    {
+      "id": "mlfoundations/open_clip",
+      "src": "github",
+      "ok": true,
+      "path": "LICENSE",
+      "firstLine": "Copyright (c) 2012-2021 Gabriel Ilharco, Mitchell Wortsman,"
+    }
+  ]
+}

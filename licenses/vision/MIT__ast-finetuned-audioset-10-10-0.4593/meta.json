@@ -1,0 +1,23 @@
+{
+  "id": "MIT/ast-finetuned-audioset-10-10-0.4593",
+  "license": "bsd-3-clause",
+  "licenseTags": [
+    "license:bsd-3-clause"
+  ],
+  "licenseName": null,
+  "gated": false,
+  "pipeline": "audio-classification",
+  "params": 86594063,
+  "datasets": null,
+  "onnx": [],
+  "files": [
+    ".gitattributes",
+    "README.md",
+    "config.json",
+    "model.safetensors",
+    "preprocessor_config.json",
+    "pytorch_model.bin"
+  ],
+  "sha": "f826b80d28226b62986cc218e5cec390b1096902",
+  "lastModified": "2023-09-06T14:49:15.000Z"
+}

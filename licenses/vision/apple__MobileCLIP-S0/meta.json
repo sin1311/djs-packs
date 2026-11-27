@@ -1,0 +1,23 @@
+{
+  "id": "apple/MobileCLIP-S0",
+  "license": "apple-amlr",
+  "licenseTags": [
+    "license:apple-amlr"
+  ],
+  "licenseName": null,
+  "gated": false,
+  "pipeline": null,
+  "params": null,
+  "datasets": null,
+  "onnx": [],
+  "files": [
+    ".gitattributes",
+    "LICENSE",
+    "README.md",
+    "config.json",
+    "fig_accuracy_latency.png",
+    "mobileclip_s0.pt"
+  ],
+  "sha": "71aa3e13dda93115871afbd017336535ba29886c",
+  "lastModified": "2025-09-03T14:02:07.000Z"
+}

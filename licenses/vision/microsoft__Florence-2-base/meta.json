@@ -1,0 +1,33 @@
+{
+  "id": "microsoft/Florence-2-base",
+  "license": "mit",
+  "licenseTags": [
+    "license:mit"
+  ],
+  "licenseName": "https://huggingface.co/microsoft/Florence-2-base/resolve/main/LICENSE",
+  "gated": false,
+  "pipeline": "image-text-to-text",
+  "params": 231567705,
+  "datasets": null,
+  "onnx": [],
+  "files": [
+    ".gitattributes",
+    "CODE_OF_CONDUCT.md",
+    "LICENSE",
+    "README.md",
+    "SECURITY.md",
+    "SUPPORT.md",
+    "config.json",
+    "configuration_florence2.py",
+    "model.safetensors",
+    "modeling_florence2.py",
+    "preprocessor_config.json",
+    "processing_florence2.py",
+    "pytorch_model.bin",
+    "tokenizer.json",
+    "tokenizer_config.json",
+    "vocab.json"
+  ],
+  "sha": "5ca5edf5bd017b9919c05d08aebef5e4c7ac3bac",
+  "lastModified": "2025-08-04T17:36:57.000Z"
+}
