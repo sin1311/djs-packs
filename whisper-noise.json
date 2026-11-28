@@ -1,0 +1,119 @@
+{
+ "fleurs": "google/fleurs (CC BY 4.0) test split",
+ "music": "stdio 엔진이 만든 곡(evals/music)",
+ "n": 20,
+ "by": {
+  "tiny-ko-clean": {
+   "err": 0.2466,
+   "empty": 0.0
+  },
+  "tiny-ko-music+10": {
+   "err": 0.4369,
+   "empty": 0.15
+  },
+  "tiny-ko-music+5": {
+   "err": 0.4058,
+   "empty": 0.0
+  },
+  "tiny-ko-music0": {
+   "err": 0.5379,
+   "empty": 0.2
+  },
+  "tiny-ko-sep0": {
+   "err": 0.366,
+   "empty": 0.0
+  },
+  "tiny-ko-talk-6": {
+   "err": 0.7777,
+   "empty": 0.4
+  },
+  "tiny-ko-talk0": {
+   "err": 1.2019,
+   "empty": 0.55
+  },
+  "tiny-en-clean": {
+   "err": 0.4091,
+   "empty": 0.05
+  },
+  "tiny-en-music+10": {
+   "err": 0.5574,
+   "empty": 0.1
+  },
+  "tiny-en-music+5": {
+   "err": 0.9378,
+   "empty": 0.1
+  },
+  "tiny-en-music0": {
+   "err": 1.5096,
+   "empty": 0.1
+  },
+  "tiny-en-sep0": {
+   "err": 0.8923,
+   "empty": 0.1
+  },
+  "tiny-en-talk-6": {
+   "err": 1.7895,
+   "empty": 0.3
+  },
+  "tiny-en-talk0": {
+   "err": 2.9163,
+   "empty": 0.2
+  },
+  "base-ko-clean": {
+   "err": 0.1039,
+   "empty": 0.0
+  },
+  "base-ko-music+10": {
+   "err": 0.1126,
+   "empty": 0.0
+  },
+  "base-ko-music+5": {
+   "err": 0.132,
+   "empty": 0.0
+  },
+  "base-ko-music0": {
+   "err": 0.1699,
+   "empty": 0.0
+  },
+  "base-ko-sep0": {
+   "err": 0.1621,
+   "empty": 0.0
+  },
+  "base-ko-talk-6": {
+   "err": 0.465,
+   "empty": 0.05
+  },
+  "base-ko-talk0": {
+   "err": 0.8408,
+   "empty": 0.05
+  },
+  "base-en-clean": {
+   "err": 0.1459,
+   "empty": 0.0
+  },
+  "base-en-music+10": {
+   "err": 0.1483,
+   "empty": 0.0
+  },
+  "base-en-music+5": {
+   "err": 0.1722,
+   "empty": 0.0
+  },
+  "base-en-music0": {
+   "err": 0.2823,
+   "empty": 0.0
+  },
+  "base-en-sep0": {
+   "err": 0.2321,
+   "empty": 0.0
+  },
+  "base-en-talk-6": {
+   "err": 0.5072,
+   "empty": 0.05
+  },
+  "base-en-talk0": {
+   "err": 0.9928,
+   "empty": 0.1
+  }
+ }
+}
