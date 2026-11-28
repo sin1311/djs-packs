@@ -1,0 +1,34 @@
+# stdio 24장 V8-2d Whisper 받아쓰기 실측 (사람/클로드가 시작): Google FLEURS 시험 문장(CC BY 4.0 · 한국어 · 영어)으로 tiny(앱) vs base 의
+#  글자 · 단어 오류율 · 언어 맞힘 · 문장 끝 부호 · 지어냄 · 속도 → whisper-eval.json(숫자만) 을 models 가지에 더해요
+name: whisper-eval
+on:
+  workflow_dispatch:
+    inputs:
+      publish: { description: 'models 가지에 더할지 (false = 확인만)', default: 'true' }
+      n: { description: '언어마다 문장 수', default: '40' }
+permissions:
+  contents: write
+jobs:
+  prep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - name: 도구
+        run: |
+          pip install -q torch==2.2.2 --index-url https://download.pytorch.org/whl/cpu
+          pip install -q "numpy<2" onnxruntime==1.17.3 transformers==4.44.2 huggingface_hub==0.24.6 soundfile scipy
+      - name: 준비
+        env: { N: '${{ github.event.inputs.n }}' }
+        run: python scripts/whisper-eval.py
+      - name: 확인용 올리기
+        uses: actions/upload-artifact@v4
+        with: { name: whisper, path: models/whisper-eval.json }
+      - name: models 가지에 더하기
+        if: ${{ github.event.inputs.publish != 'false' }}
+        run: |
+          git config --global user.name 'github-actions[bot]'; git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git clone -q --depth 1 -b models "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" mb
+          cp models/whisper-eval.json mb/ && cd mb && git add -A && git commit -q -m "Whisper 받아쓰기 실측 (FLEURS 한국어 · 영어 · tiny vs base)" && for k in 1 2 3 4; do git push origin models && break; sleep $((k * 15)); git pull -q --rebase origin models; done
