@@ -1,0 +1,134 @@
+{
+ "fleurs": "google/fleurs (CC BY 4.0) test split",
+ "n": 40,
+ "models": {
+  "tiny": "d750af053d58f9ecf153fa13c5ef2ca9e9cd069e",
+  "base": "27a07b4b52b3a4c5886134bb4320e93e1a4bbc7c"
+ },
+ "by": {
+  "tiny-ko": {
+   "err": 0.244,
+   "metric": "CER",
+   "langOk": 1.0,
+   "endPunct": 0.95,
+   "empty": 0.0,
+   "rtf": 0.049,
+   "n": 40,
+   "ex": [
+    {
+     "ref": "합금은 기본적으로 금속 두 개 이상의 혼합물이다. 주기율표 상에 원소가 많이 있다는 것을 잊지 마라.",
+     "hyp": "학금은 기본적으로 금속 2개 이상의 혼합물이다. 중기울 표상의 원속과 많이 있다는 것을 잊지 말아.",
+     "lang": "ko"
+    },
+    {
+     "ref": "홍콩 섬은 홍콩 영토에 홍콩이라는 이름을 부여한 곳이자 많은 관광객들이 주안점으로 여기는 곳이다.",
+     "hyp": "홍콩상은 홍콩 영토의 홍콩이라는 이름을 부여한 곳이자 많은 관광객들이 추환점을 여기는 곳이다.",
+     "lang": "ko"
+    },
+    {
+     "ref": "왕과 왕비는 마차를 타고 자신들에게 소리를 지르고 위협을 하는 군중들에게 둘러싸인 채 파리로 돌아갔다.",
+     "hyp": "왕과 왕비는 마차를 타고 자신들에게 소리를 지르고 위협을 하는 군중들에게 둘러스 다인체 8일으로 돌아갔다.",
+     "lang": "ko"
+    },
+    {
+     "ref": "오늘날 날개를 접을 수 없는 곤충은 잠자리와 파리밖에 없습니다.",
+     "hyp": "오늘 날 날개를 적을 수 없는 공증은 잠자리와 팔이 밖에 없습니다.",
+     "lang": "ko"
+    }
+   ]
+  },
+  "tiny-en": {
+   "err": 0.7032,
+   "metric": "WER",
+   "langOk": 1.0,
+   "endPunct": 0.925,
+   "empty": 0.0,
+   "rtf": 0.068,
+   "n": 40,
+   "ex": [
+    {
+     "ref": "All nouns, alongside the word Sie for you, always begin with a capital letter, e",
+     "hyp": "All now is alongside the world's safe for you, always begin with a capital lette",
+     "lang": "en"
+    },
+    {
+     "ref": "The cabbage juice changes color depending on how acidic or basic (alkaline) the ",
+     "hyp": "The cap is used to change its color depending on how aesthetic, basic alkaline t",
+     "lang": "en"
+    },
+    {
+     "ref": "Twentieth century research has shown that there are two pools of genetic variati",
+     "hyp": "20th century research shows that there are two poles of genetic variation hidden",
+     "lang": "en"
+    },
+    {
+     "ref": "In some areas boiling water for a minute is enough, in others several minutes ar",
+     "hyp": "And some areas boiling water for a minute is enough and other several minutes ar",
+     "lang": "en"
+    }
+   ]
+  },
+  "base-ko": {
+   "err": 0.1043,
+   "metric": "CER",
+   "langOk": 1.0,
+   "endPunct": 0.975,
+   "empty": 0.0,
+   "rtf": 0.088,
+   "n": 40,
+   "ex": [
+    {
+     "ref": "합금은 기본적으로 금속 두 개 이상의 혼합물이다. 주기율표 상에 원소가 많이 있다는 것을 잊지 마라.",
+     "hyp": "합금은 기본적으로 금속 2개 이상의 혼합물이다. 주기율 표상의 원소가 많이 있다는 것을 잊지 마라.",
+     "lang": "ko"
+    },
+    {
+     "ref": "홍콩 섬은 홍콩 영토에 홍콩이라는 이름을 부여한 곳이자 많은 관광객들이 주안점으로 여기는 곳이다.",
+     "hyp": "홍콩섬은 홍콩 영토의 홍콩이라는 이름을 부여한 곳이자 많은 관광객들이 주환점으로 여기는 곳이다.",
+     "lang": "ko"
+    },
+    {
+     "ref": "왕과 왕비는 마차를 타고 자신들에게 소리를 지르고 위협을 하는 군중들에게 둘러싸인 채 파리로 돌아갔다.",
+     "hyp": "왕과 왕비는 마찰을 타고 자신들에게 소리를 지르고 위협을 하는 군중들에게 둘러싸인 채 8이로 돌아갔다.",
+     "lang": "ko"
+    },
+    {
+     "ref": "오늘날 날개를 접을 수 없는 곤충은 잠자리와 파리밖에 없습니다.",
+     "hyp": "어느 날 날개를 접을 수 없는 공증은 잠자리와 파리 밖에 없습니다.",
+     "lang": "ko"
+    }
+   ]
+  },
+  "base-en": {
+   "err": 0.1178,
+   "metric": "WER",
+   "langOk": 1.0,
+   "endPunct": 1.0,
+   "empty": 0.0,
+   "rtf": 0.104,
+   "n": 40,
+   "ex": [
+    {
+     "ref": "All nouns, alongside the word Sie for you, always begin with a capital letter, e",
+     "hyp": "All now is alongside the world's safe for you. Always begin with a capital lette",
+     "lang": "en"
+    },
+    {
+     "ref": "The cabbage juice changes color depending on how acidic or basic (alkaline) the ",
+     "hyp": "The cabbage juice changes color depending on how acidic, basic alkaline the chem",
+     "lang": "en"
+    },
+    {
+     "ref": "Twentieth century research has shown that there are two pools of genetic variati",
+     "hyp": "20th century research has shown that there are two pools of genetic variation hi",
+     "lang": "en"
+    },
+    {
+     "ref": "In some areas boiling water for a minute is enough, in others several minutes ar",
+     "hyp": "In some areas, boiling water for a minute is enough and other several minutes ar",
+     "lang": "en"
+    }
+   ]
+  }
+ }
+}
