@@ -12,7 +12,7 @@
    "langOk": 1.0,
    "endPunct": 0.95,
    "empty": 0.0,
-   "rtf": 0.049,
+   "rtf": 0.05,
    "n": 40,
    "ex": [
     {
@@ -35,15 +35,48 @@
      "hyp": "오늘 날 날개를 적을 수 없는 공증은 잠자리와 팔이 밖에 없습니다.",
      "lang": "ko"
     }
+   ],
+   "loops": 0,
+   "worst": [
+    {
+     "e": 0.704,
+     "ref": "지각은 가까운 쪽이 약 70km, 먼 쪽이 약 100km 두께입니다.",
+     "hyp": "지금은 각각은 17km1.2km2.",
+     "loop": false
+    },
+    {
+     "e": 0.543,
+     "ref": "집권당인 서아프리카 인민 기구(SWAPO)도 의회 선거에서 과반수를 유지했습니다.",
+     "hyp": "10번 당인 사업립과 인밍기고 SWAPO도 유구에서 구한수를 주겠습니다.",
+     "loop": false
+    },
+    {
+     "e": 0.433,
+     "ref": "초기에 해당 프로는 토크 라디오에 중점을 둔 사이트이자 장기 인터넷 라디오 사이트인 TogiNet Radio에서 단독으로 진행되었습니다.",
+     "hyp": "조기의 해당 프로는 토끼라��오의 중점을 또는 사이터에 자 장기인터널디오 사이터인 토지는 라디오에서 잔동으로 진행되었습니다.",
+     "loop": false
+    },
+    {
+     "e": 0.413,
+     "ref": "\"하지만 적도에서 몇 도 정도에 위치한 \"\"고열대\"\" 지방에 놓이게 되면, 높은 기온(항상 높음)과 강한 태양의 내리쬠(드물지만 하늘이 맑을 때)을 상대해야 할 ",
+     "hyp": "하지만 적도에서 몇 도정도에 위치한 고혈 때 지방이 되기라면 높은 기운과 강한 태양의 내리지않을 생각해 알 것입니다.",
+     "loop": false
+    },
+    {
+     "e": 0.379,
+     "ref": "이들의 시대에는 빛 공해가 오늘날과 같은 수준이 아니었기 때문에 이들은 오늘날의 관측대와 달리 도시나 캠퍼스와 같이 쉽게 접근할 수 있는 장소에 위치했습니다.",
+     "hyp": "이들은 오늘의 관측대와 다른 수준이 아니었기 때문에 이들은 오늘의 관측대와 다른 도시나 캠파스와 같이 시켜줄 수 있는 장소의 위치했습니다.",
+     "loop": false
+    }
    ]
   },
   "tiny-en": {
-   "err": 0.7032,
+   "err": 0.3868,
    "metric": "WER",
    "langOk": 1.0,
    "endPunct": 0.925,
-   "empty": 0.0,
-   "rtf": 0.068,
+   "empty": 0.05,
+   "rtf": 0.059,
    "n": 40,
    "ex": [
     {
@@ -66,6 +99,39 @@
      "hyp": "And some areas boiling water for a minute is enough and other several minutes ar",
      "lang": "en"
     }
+   ],
+   "loops": 2,
+   "worst": [
+    {
+     "e": 1.0,
+     "ref": "Four skiers in the women's sitting group failed to finish their runs, and 45 of the 117 to",
+     "hyp": "",
+     "loop": true
+    },
+    {
+     "e": 1.0,
+     "ref": "Current senator and Argentine First Lady Cristina Fernandez de Kirchner announced her pres",
+     "hyp": "",
+     "loop": true
+    },
+    {
+     "e": 0.944,
+     "ref": "Popular sports include football, basketball, volleyball, water-polo, fencing, rugby, cycli",
+     "hyp": "I hope you guys are all supporting this video, please like, share, and subscribe.",
+     "loop": false
+    },
+    {
+     "e": 0.929,
+     "ref": "Police superintendent Chandra Shekhar Solanki said the accused appeared in court with cove",
+     "hyp": "Please support the British General Shankara Solansky, said to you to use the peer-in-court with covered faces.",
+     "loop": false
+    },
+    {
+     "e": 0.913,
+     "ref": "In its early days, the show was featured solely at the long-running internet radio site To",
+     "hyp": "In the next video, I will be sharing the video with you in the next video.",
+     "loop": false
+    }
    ]
   },
   "base-ko": {
@@ -74,7 +140,7 @@
    "langOk": 1.0,
    "endPunct": 0.975,
    "empty": 0.0,
-   "rtf": 0.088,
+   "rtf": 0.087,
    "n": 40,
    "ex": [
     {
@@ -97,6 +163,39 @@
      "hyp": "어느 날 날개를 접을 수 없는 공증은 잠자리와 파리 밖에 없습니다.",
      "lang": "ko"
     }
+   ],
+   "loops": 0,
+   "worst": [
+    {
+     "e": 0.35,
+     "ref": "초기에 해당 프로는 토크 라디오에 중점을 둔 사이트이자 장기 인터넷 라디오 사이트인 TogiNet Radio에서 단독으로 진행되었습니다.",
+     "hyp": "조기에 해당 브로는 토크 라디오의 중점을 둔 사이터에서 장길 인터넷 라디오 사이터에 토지는 라디오에서 단독으로 진행되었습니다.",
+     "loop": false
+    },
+    {
+     "e": 0.317,
+     "ref": "\"하지만 적도에서 몇 도 정도에 위치한 \"\"고열대\"\" 지방에 놓이게 되면, 높은 기온(항상 높음)과 강한 태양의 내리쬠(드물지만 하늘이 맑을 때)을 상대해야 할 ",
+     "hyp": "하지만 적도에서 몇도 정도의 위치한 고요일 때 지방에 놓이게 되면 높은 기운과 강한 태양의 내리쯤이 상대해야 할 것입니다.",
+     "loop": false
+    },
+    {
+     "e": 0.208,
+     "ref": "올리버 색스는 그가 집필한 '대통령의 연설'에서 뇌 손상으로 인해 연설을 알아듣지 못함에도 불구하고 사람들이 그에 담긴 성실성을 정확하게 받아들였음에 대하여 나타",
+     "hyp": "올리버 섹스는 귀가 집힐한 대통령의 연설에서 내 손상으로 인해 연설을 알아들지 못함에도 불구하고 사람들이 그의 단균 성실 수정을 정확하게 받아들였으면 되야 나타냈습니다.",
+     "loop": false
+    },
+    {
+     "e": 0.2,
+     "ref": "\"한 목격자는 사람들이 무리를 이루어 거리를 배회하고 물품을 약탈하는 것으로 보아 비슈케크(Bishkek)가 \"\"무정부\"\"상태로 빠지고 있다고 묘사하였습니다.\"",
+     "hyp": "한 목격자는 사람들이 무리를 이루어 거리를 배회하고 물품을 약탈하는 것으로 보아 비싯객가 무장부상태로 빠지고 있다고 묘사했습니다.",
+     "loop": false
+    },
+    {
+     "e": 0.196,
+     "ref": "예를 들어, 세계에서 가장 일반적인 정지 화상 사진 포맷은 35 mm인데, 이는 아날로그 필름 시대 끝 무렵에 주로 쓰인 필름 사이즈였습니다.",
+     "hyp": "예를 들어 세계에서 가장 일반적인 정지 화상 사진폼에선 35mm인데 이는 안알록 필름 시대 끝 무려 를 쓰인 필름 사이즈였습니다.",
+     "loop": false
+    }
    ]
   },
   "base-en": {
@@ -105,7 +204,7 @@
    "langOk": 1.0,
    "endPunct": 1.0,
    "empty": 0.0,
-   "rtf": 0.104,
+   "rtf": 0.107,
    "n": 40,
    "ex": [
     {
@@ -127,6 +226,39 @@
      "ref": "In some areas boiling water for a minute is enough, in others several minutes ar",
      "hyp": "In some areas, boiling water for a minute is enough and other several minutes ar",
      "lang": "en"
+    }
+   ],
+   "loops": 0,
+   "worst": [
+    {
+     "e": 0.364,
+     "ref": "You can use boda-boda (motorcycle taxi) to get around Goma. The normal (local) price is ~5",
+     "hyp": "You can use Boda Boda, more cycle taxi to get around Goma. The normal local price is 500. It can go these francs for the short ride.",
+     "loop": false
+    },
+    {
+     "e": 0.364,
+     "ref": "The governor's office said nineteen of the injured were police officers.",
+     "hyp": "The Governor's Office in 19 of the Intrad work police officers.",
+     "loop": false
+    },
+    {
+     "e": 0.318,
+     "ref": "You can use boda-boda (motorcycle taxi) to get around Goma. The normal (local) price is ~5",
+     "hyp": "You can use boat up boat up Marsecoltaxi to get around Goma. The normal local price is 500 kcal for the short ride.",
+     "loop": false
+    },
+    {
+     "e": 0.286,
+     "ref": "Police superintendent Chandra Shekhar Solanki said the accused appeared in court with cove",
+     "hyp": "Police superintendent Shana Shankhar Solansky said he accused appeared in court with covered faces.",
+     "loop": false
+    },
+    {
+     "e": 0.276,
+     "ref": "Current senator and Argentine First Lady Cristina Fernandez de Kirchner announced her pres",
+     "hyp": "Current Senator and Argentine First Lady Christina Fernandez accursion her announced for presidential candidacy yesterday. Evening and La Plata is 30-50 kilomet",
+     "loop": false
     }
    ]
   }
