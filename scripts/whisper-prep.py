@@ -9,7 +9,9 @@ import numpy as np
 OUT = 'models'; os.makedirs(OUT, exist_ok=True); os.makedirs('wh', exist_ok=True)
 sha = lambda b: hashlib.sha256(b).hexdigest()
 from huggingface_hub import HfApi, hf_hub_download
-REPO = 'onnx-community/whisper-tiny'
+SIZE = os.environ.get('SIZE', 'tiny')  # tiny(T1) · base(T2 — 실측 whisper-eval: 한국어 CER 24% → 10%)
+REPO = f'onnx-community/whisper-{SIZE}'
+PFX = 'whisper' if SIZE == 'tiny' else f'whisper-{SIZE}'  # tiny 는 예전 이름 그대로(앱이 이미 고정)
 info = HfApi().model_info(REPO); REV = info.sha; print('onnx-community/whisper-tiny 고정', REV)
 files = sorted(s.rfilename for s in info.siblings); print('\n'.join(f for f in files if f.startswith('onnx/') or f.endswith('.json')))
 def dl(f): return hf_hub_download(REPO, f, revision=REV)
@@ -39,7 +41,7 @@ io = { 'enc': { 'in': [i.name for i in E.get_inputs()], 'out': [o.name for o in 
 print(json.dumps(io)[:1500]); gen['io'] = io
 
 from transformers import WhisperFeatureExtractor
-FE = WhisperFeatureExtractor.from_pretrained('openai/whisper-tiny')
+FE = WhisperFeatureExtractor.from_pretrained(f'openai/whisper-{SIZE}')
 
 def lsm(x): m = x.max(); return x - m - np.log(np.exp(x - m).sum())
 def rules(logits, seq, k):
@@ -142,7 +144,7 @@ sig = { 'say1': s1, 'say2': s2, 'two': np.concatenate([s1, np.zeros(int(1.5 * SR
 
 import torch
 from transformers import pipeline
-asr = pipeline('automatic-speech-recognition', model='openai/whisper-tiny', device='cpu')
+asr = pipeline('automatic-speech-recognition', model=f'openai/whisper-{SIZE}', device='cpu')
 ref = {'repo': REPO, 'rev': REV, 'sr': SR, 'cases': {}}
 for name, x in sig.items():
     feat = FE(x, sampling_rate=SR, return_tensors='np').input_features.astype(np.float32)  # [1, 80, 3000]
@@ -157,10 +159,11 @@ for name, x in sig.items():
 def put(src, dst):
     b = open(src, 'rb').read(); open(f'{OUT}/{dst}', 'wb').write(b); return {'file': dst, 'bytes': len(b), 'sha256': sha(b)}
 man = { 'model': REPO, 'rev': REV, 'license': 'apache-2.0 (모델 카드) · MIT (openai/whisper 코드)', 'card_head': card,
-  'enc': put(ENC, 'whisper-tiny-enc.onnx'), 'dec': put(DEC, 'whisper-tiny-dec.onnx') }
-json.dump(toks, open(f'{OUT}/whisper-vocab.json', 'w'), ensure_ascii=False)
-json.dump({**gen, 'files': man}, open(f'{OUT}/whisper-gen.json', 'w'), ensure_ascii=False, indent=1)
-json.dump(ref, open(f'{OUT}/whisper-ref.json', 'w'), ensure_ascii=False)
-for f in ['whisper-vocab.json', 'whisper-gen.json', 'whisper-ref.json']:
+  'enc': put(ENC, f'whisper-{SIZE}-enc.onnx'), 'dec': put(DEC, f'whisper-{SIZE}-dec.onnx') }
+vb = json.dumps(toks, ensure_ascii=False).encode(); print('어휘 sha', sha(vb), '(tiny 와 같아야 해요 — 다국어 어휘 하나)')
+if SIZE == 'tiny': open(f'{OUT}/whisper-vocab.json', 'wb').write(vb)
+json.dump({**gen, 'files': man, 'size': SIZE, 'vocabSha': sha(vb)}, open(f'{OUT}/{PFX}-gen.json', 'w'), ensure_ascii=False, indent=1)
+json.dump(ref, open(f'{OUT}/{PFX}-ref.json', 'w'), ensure_ascii=False)
+for f in ([f'{PFX}-gen.json', f'{PFX}-ref.json'] + (['whisper-vocab.json'] if SIZE == 'tiny' else [])):
     b = open(f'{OUT}/{f}', 'rb').read(); print(f, len(b), sha(b))
 print(json.dumps(man, ensure_ascii=False)[:600])

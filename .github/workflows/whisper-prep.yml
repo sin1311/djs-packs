@@ -5,6 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       publish: { description: 'models 가지에 더할지 (false = 확인만)', default: 'true' }
+      size: { description: 'tiny 또는 base', default: 'tiny' }
 permissions:
   contents: write
 jobs:
@@ -21,6 +22,7 @@ jobs:
           pip install -q torch==2.2.2 --index-url https://download.pytorch.org/whl/cpu
           pip install -q "numpy<2" onnxruntime==1.17.3 transformers==4.44.2 huggingface_hub==0.24.6 soundfile scipy
       - name: 준비
+        env: { SIZE: '${{ github.event.inputs.size }}' }
         run: python scripts/whisper-prep.py
       - name: 확인용 올리기
         uses: actions/upload-artifact@v4
@@ -30,4 +32,4 @@ jobs:
         run: |
           git config --global user.name 'github-actions[bot]'; git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           git clone -q --depth 1 -b models "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" mb
-          cp models/whisper* mb/ && cd mb && git add -A && git commit -q -m "Whisper tiny 준비물 (인코더 · 디코더 int8 · 어휘 · 생성 설정 · 기준값)" && for k in 1 2 3 4; do git push origin models && break; sleep $((k * 15)); git pull -q --rebase origin models; done
+          cp models/whisper* mb/ && cd mb && git add -A && git commit -q -m "Whisper ${{ github.event.inputs.size }} 준비물 (인코더 · 디코더 int8 · 어휘 · 생성 설정 · 기준값)" && for k in 1 2 3 4; do git push origin models && break; sleep $((k * 15)); git pull -q --rebase origin models; done
