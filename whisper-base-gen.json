@@ -1,0 +1,541 @@
+{
+ "rev": "27a07b4b52b3a4c5886134bb4320e93e1a4bbc7c",
+ "sot": 50258,
+ "eot": 50257,
+ "transcribe": 50359,
+ "translate": 50358,
+ "notimestamps": 50363,
+ "ts0": 50364,
+ "lang": {
+  "<|af|>": 50327,
+  "<|am|>": 50334,
+  "<|ar|>": 50272,
+  "<|as|>": 50350,
+  "<|az|>": 50304,
+  "<|ba|>": 50355,
+  "<|be|>": 50330,
+  "<|bg|>": 50292,
+  "<|bn|>": 50302,
+  "<|bo|>": 50347,
+  "<|br|>": 50309,
+  "<|bs|>": 50315,
+  "<|ca|>": 50270,
+  "<|cs|>": 50283,
+  "<|cy|>": 50297,
+  "<|da|>": 50285,
+  "<|de|>": 50261,
+  "<|el|>": 50281,
+  "<|en|>": 50259,
+  "<|es|>": 50262,
+  "<|et|>": 50307,
+  "<|eu|>": 50310,
+  "<|fa|>": 50300,
+  "<|fi|>": 50277,
+  "<|fo|>": 50338,
+  "<|fr|>": 50265,
+  "<|gl|>": 50319,
+  "<|gu|>": 50333,
+  "<|haw|>": 50352,
+  "<|ha|>": 50354,
+  "<|he|>": 50279,
+  "<|hi|>": 50276,
+  "<|hr|>": 50291,
+  "<|ht|>": 50339,
+  "<|hu|>": 50286,
+  "<|hy|>": 50312,
+  "<|id|>": 50275,
+  "<|is|>": 50311,
+  "<|it|>": 50274,
+  "<|ja|>": 50266,
+  "<|jw|>": 50356,
+  "<|ka|>": 50329,
+  "<|kk|>": 50316,
+  "<|km|>": 50323,
+  "<|kn|>": 50306,
+  "<|ko|>": 50264,
+  "<|la|>": 50294,
+  "<|lb|>": 50345,
+  "<|ln|>": 50353,
+  "<|lo|>": 50336,
+  "<|lt|>": 50293,
+  "<|lv|>": 50301,
+  "<|mg|>": 50349,
+  "<|mi|>": 50295,
+  "<|mk|>": 50308,
+  "<|ml|>": 50296,
+  "<|mn|>": 50314,
+  "<|mr|>": 50320,
+  "<|ms|>": 50282,
+  "<|mt|>": 50343,
+  "<|my|>": 50346,
+  "<|ne|>": 50313,
+  "<|nl|>": 50271,
+  "<|nn|>": 50342,
+  "<|no|>": 50288,
+  "<|oc|>": 50328,
+  "<|pa|>": 50321,
+  "<|pl|>": 50269,
+  "<|ps|>": 50340,
+  "<|pt|>": 50267,
+  "<|ro|>": 50284,
+  "<|ru|>": 50263,
+  "<|sa|>": 50344,
+  "<|sd|>": 50332,
+  "<|si|>": 50322,
+  "<|sk|>": 50298,
+  "<|sl|>": 50305,
+  "<|sn|>": 50324,
+  "<|so|>": 50326,
+  "<|sq|>": 50317,
+  "<|sr|>": 50303,
+  "<|su|>": 50357,
+  "<|sv|>": 50273,
+  "<|sw|>": 50318,
+  "<|ta|>": 50287,
+  "<|te|>": 50299,
+  "<|tg|>": 50331,
+  "<|th|>": 50289,
+  "<|tk|>": 50341,
+  "<|tl|>": 50348,
+  "<|tr|>": 50268,
+  "<|tt|>": 50351,
+  "<|uk|>": 50280,
+  "<|ur|>": 50290,
+  "<|uz|>": 50337,
+  "<|vi|>": 50278,
+  "<|yi|>": 50335,
+  "<|yo|>": 50325,
+  "<|zh|>": 50260
+ },
+ "suppress": [
+  1,
+  2,
+  7,
+  8,
+  9,
+  10,
+  14,
+  25,
+  26,
+  27,
+  28,
+  29,
+  31,
+  58,
+  59,
+  60,
+  61,
+  62,
+  63,
+  90,
+  91,
+  92,
+  93,
+  359,
+  503,
+  522,
+  542,
+  873,
+  893,
+  902,
+  918,
+  922,
+  931,
+  1350,
+  1853,
+  1982,
+  2460,
+  2627,
+  3246,
+  3253,
+  3268,
+  3536,
+  3846,
+  3961,
+  4183,
+  4667,
+  6585,
+  6647,
+  7273,
+  9061,
+  9383,
+  10428,
+  10929,
+  11938,
+  12033,
+  12331,
+  12562,
+  13793,
+  14157,
+  14635,
+  15265,
+  15618,
+  16553,
+  16604,
+  18362,
+  18956,
+  20075,
+  21675,
+  22520,
+  26130,
+  26161,
+  26435,
+  28279,
+  29464,
+  31650,
+  32302,
+  32470,
+  36865,
+  42863,
+  47425,
+  49870,
+  50254,
+  50258,
+  50358,
+  50359,
+  50360,
+  50361,
+  50362
+ ],
+ "beginSuppress": [
+  220,
+  50257
+ ],
+ "maxInitialTs": 50,
+ "nLayers": 6,
+ "nHeads": 8,
+ "dModel": 512,
+ "maxTarget": 448,
+ "pre": {
+  "feature_size": 80,
+  "sampling_rate": 16000,
+  "hop_length": 160,
+  "n_fft": 400,
+  "chunk_length": 30,
+  "n_samples": 480000,
+  "nb_max_frames": 3000
+ },
+ "io": {
+  "enc": {
+   "in": [
+    "input_features"
+   ],
+   "out": [
+    "last_hidden_state"
+   ]
+  },
+  "dec": {
+   "in": [
+    [
+     "input_ids",
+     "tensor(int64)",
+     [
+      "batch_size",
+      "decoder_sequence_length"
+     ]
+    ],
+    [
+     "encoder_hidden_states",
+     "tensor(float)",
+     [
+      "batch_size",
+      "encoder_sequence_length / 2",
+      512
+     ]
+    ],
+    [
+     "past_key_values.0.decoder.key",
+     "tensor(float)",
+     [
+      "batch_size",
+      8,
+      "past_decoder_sequence_length",
+      64
+     ]
+    ],
+    [
+     "past_key_values.0.decoder.value",
+     "tensor(float)",
+     [
+      "batch_size",
+      8,
+      "past_decoder_sequence_length",
+      64
+     ]
+    ],
+    [
+     "past_key_values.0.encoder.key",
+     "tensor(float)",
+     [
+      "batch_size",
+      8,
+      "encoder_sequence_length_out",
+      64
+     ]
+    ],
+    [
+     "past_key_values.0.encoder.value",
+     "tensor(float)",
+     [
+      "batch_size",
+      8,
+      "encoder_sequence_length_out",
+      64
+     ]
+    ],
+    [
+     "past_key_values.1.decoder.key",
+     "tensor(float)",
+     [
+      "batch_size",
+      8,
+      "past_decoder_sequence_length",
+      64
+     ]
+    ],
+    [
+     "past_key_values.1.decoder.value",
+     "tensor(float)",
+     [
+      "batch_size",
+      8,
+      "past_decoder_sequence_length",
+      64
+     ]
+    ],
+    [
+     "past_key_values.1.encoder.key",
+     "tensor(float)",
+     [
+      "batch_size",
+      8,
+      "encoder_sequence_length_out",
+      64
+     ]
+    ],
+    [
+     "past_key_values.1.encoder.value",
+     "tensor(float)",
+     [
+      "batch_size",
+      8,
+      "encoder_sequence_length_out",
+      64
+     ]
+    ],
+    [
+     "past_key_values.2.decoder.key",
+     "tensor(float)",
+     [
+      "batch_size",
+      8,
+      "past_decoder_sequence_length",
+      64
+     ]
+    ],
+    [
+     "past_key_values.2.decoder.value",
+     "tensor(float)",
+     [
+      "batch_size",
+      8,
+      "past_decoder_sequence_length",
+      64
+     ]
+    ],
+    [
+     "past_key_values.2.encoder.key",
+     "tensor(float)",
+     [
+      "batch_size",
+      8,
+      "encoder_sequence_length_out",
+      64
+     ]
+    ],
+    [
+     "past_key_values.2.encoder.value",
+     "tensor(float)",
+     [
+      "batch_size",
+      8,
+      "encoder_sequence_length_out",
+      64
+     ]
+    ],
+    [
+     "past_key_values.3.decoder.key",
+     "tensor(float)",
+     [
+      "batch_size",
+      8,
+      "past_decoder_sequence_length",
+      64
+     ]
+    ],
+    [
+     "past_key_values.3.decoder.value",
+     "tensor(float)",
+     [
+      "batch_size",
+      8,
+      "past_decoder_sequence_length",
+      64
+     ]
+    ],
+    [
+     "past_key_values.3.encoder.key",
+     "tensor(float)",
+     [
+      "batch_size",
+      8,
+      "encoder_sequence_length_out",
+      64
+     ]
+    ],
+    [
+     "past_key_values.3.encoder.value",
+     "tensor(float)",
+     [
+      "batch_size",
+      8,
+      "encoder_sequence_length_out",
+      64
+     ]
+    ],
+    [
+     "past_key_values.4.decoder.key",
+     "tensor(float)",
+     [
+      "batch_size",
+      8,
+      "past_decoder_sequence_length",
+      64
+     ]
+    ],
+    [
+     "past_key_values.4.decoder.value",
+     "tensor(float)",
+     [
+      "batch_size",
+      8,
+      "past_decoder_sequence_length",
+      64
+     ]
+    ],
+    [
+     "past_key_values.4.encoder.key",
+     "tensor(float)",
+     [
+      "batch_size",
+      8,
+      "encoder_sequence_length_out",
+      64
+     ]
+    ],
+    [
+     "past_key_values.4.encoder.value",
+     "tensor(float)",
+     [
+      "batch_size",
+      8,
+      "encoder_sequence_length_out",
+      64
+     ]
+    ],
+    [
+     "past_key_values.5.decoder.key",
+     "tensor(float)",
+     [
+      "batch_size",
+      8,
+      "past_decoder_sequence_length",
+      64
+     ]
+    ],
+    [
+     "past_key_values.5.decoder.value",
+     "tensor(float)",
+     [
+      "batch_size",
+      8,
+      "past_decoder_sequence_length",
+      64
+     ]
+    ],
+    [
+     "past_key_values.5.encoder.key",
+     "tensor(float)",
+     [
+      "batch_size",
+      8,
+      "encoder_sequence_length_out",
+      64
+     ]
+    ],
+    [
+     "past_key_values.5.encoder.value",
+     "tensor(float)",
+     [
+      "batch_size",
+      8,
+      "encoder_sequence_length_out",
+      64
+     ]
+    ],
+    [
+     "use_cache_branch",
+     "tensor(bool)",
+     [
+      1
+     ]
+    ]
+   ],
+   "out": [
+    "logits",
+    "present.0.decoder.key",
+    "present.0.decoder.value",
+    "present.0.encoder.key",
+    "present.0.encoder.value",
+    "present.1.decoder.key",
+    "present.1.decoder.value",
+    "present.1.encoder.key",
+    "present.1.encoder.value",
+    "present.2.decoder.key",
+    "present.2.decoder.value",
+    "present.2.encoder.key",
+    "present.2.encoder.value",
+    "present.3.decoder.key",
+    "present.3.decoder.value",
+    "present.3.encoder.key",
+    "present.3.encoder.value",
+    "present.4.decoder.key",
+    "present.4.decoder.value",
+    "present.4.encoder.key",
+    "present.4.encoder.value",
+    "present.5.decoder.key",
+    "present.5.decoder.value",
+    "present.5.encoder.key",
+    "present.5.encoder.value"
+   ]
+  }
+ },
+ "files": {
+  "model": "onnx-community/whisper-base",
+  "rev": "27a07b4b52b3a4c5886134bb4320e93e1a4bbc7c",
+  "license": "apache-2.0 (모델 카드) · MIT (openai/whisper 코드)",
+  "card_head": "---\nbase_model: openai/whisper-base\nlibrary_name: transformers.js\nlicense: apache-2.0\n---\n\nhttps://huggingface.co/openai/whisper-base with ONNX weights to be compatible with Transformers.js.\n\nNote: Having a separate repo for ONNX weights is intended to be a temporary solution until WebML gains more traction. If you would like to make your models web-ready, we recommend converting to ONNX using [🤗 Optimum](https://huggingface.co/docs/optimum/index) and structuring your repo like this one (with ONNX weights located in a subfolder named `onnx`).",
+  "enc": {
+   "file": "whisper-base-enc.onnx",
+   "bytes": 23201314,
+   "sha256": "5862993336bf33acd23736071aae2b32261d3b1b2f37780194460d4ef974dd46"
+  },
+  "dec": {
+   "file": "whisper-base-dec.onnx",
+   "bytes": 53693315,
+   "sha256": "fa3ef9902734ce5ae6f9ef2bdb2ba9a6c4b5785b09f4f420ce036573dc9d090b"
+  }
+ },
+ "size": "base",
+ "vocabSha": "f67300a66ccbdb862a2cc874c2a04655996b08362c2144365a99b8a90f8d64cf"
+}
