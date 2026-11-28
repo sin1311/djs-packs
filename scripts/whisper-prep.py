@@ -135,6 +135,8 @@ def lcg(seed):
     def r(): a[0] = (a[0] * 1664525 + 1013904223) % 4294967296; return a[0] / 4294967296
     return r
 r = lcg(7)
+q16 = lambda x: (np.round(np.clip(x, -1, 1) * 32767).astype(np.int16).astype(np.float32) / 32767)  # 16비트로 저장해 앱에 주니 기준값도 같은 16비트 소리로(앱 = 파이썬 입력이 표본까지 같게)
+s1, s2 = q16(s1), q16(s2)
 sig = { 'say1': s1, 'say2': s2, 'two': np.concatenate([s1, np.zeros(int(1.5 * SR), np.float32), s2]),
   'quiet': np.array([0.003 * (r() * 2 - 1) for _ in range(SR * 3)], np.float32), 'sine': (0.3 * np.sin(2 * np.pi * 440 * np.arange(SR * 2) / SR)).astype(np.float32) }
 
@@ -147,7 +149,7 @@ for name, x in sig.items():
     F = feat[0]
     prompt, seq = decode(feat)
     pt = asr({'raw': x.astype(np.float32), 'sampling_rate': SR}, return_timestamps=True, generate_kwargs={'task': 'transcribe'})
-    ref['cases'][name] = { 'n': int(len(x)), 'wav': base64.b64encode((np.clip(x, -1, 1) * 32767).astype('<i2').tobytes()).decode() if name in ('say1', 'say2', 'two') else None,
+    ref['cases'][name] = { 'n': int(len(x)), 'wav': base64.b64encode(np.round(np.clip(x, -1, 1) * 32767).astype('<i2').tobytes()).decode() if name in ('say1', 'say2', 'two') else None,
       'melRows': {str(i): [round(float(v), 5) for v in F[:, i]] for i in [0, 10, 50, 120, 299]}, 'melSum': round(float(F.sum()), 3), 'melMax': round(float(F.max()), 5), 'melMin': round(float(F.min()), 5),
       'prompt': prompt, 'tokens': seq, 'segs': textOf(seq), 'torch': {'text': pt['text'], 'chunks': [{'t': list(c['timestamp']), 'text': c['text']} for c in pt.get('chunks', [])]} }
     print(name, prompt, len(seq), textOf(seq), '| torch:', pt['text'])
