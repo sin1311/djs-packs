@@ -70,13 +70,27 @@ class Model:
             t = rules(logits, seq, k)
             if t == EOT: break
             seq.append(t); lps += float(lsm(logits.astype(np.float64))[t])
-            if len(seq) >= 8 and all(v == t for v in seq[-8:]): loop = True; break
+            if len(seq) >= 8 and all(v == t for v in seq[-8:]): loop = True; seq = seq[:-7]; break
+            cut = phrase_loop(seq) if GUARD else 0
+            if cut: seq = seq[:cut]; loop = True; break
             logits, _, past = s.step([t], eh, {**{a: b for a, b in past.items() if '.encoder.' not in a}, **enc}, True)
             past = {**{a: b for a, b in past.items() if '.encoder.' not in a}, **enc}
         avg = lps / max(1, len(seq)); silent = nos > 0.6 and avg < -1
         lang = [k for k, v in LANG.items() if v == lid][0].strip('<|>')
         return {'text': '' if silent or loop else text_of(seq), 'lang': lang, 'loop': loop, 'silent': silent, 'n': len(seq)}
 
+GUARD = True
+def phrase_loop(seq):
+    # 끝에서 같은 말 묶음(2 ~ 8 토큰 · 시간 표시 빼고)이 세 번 잇달아 → 한 번만 남기고 자를 자리
+    tx = [t for t in seq if t < EOT]
+    if len(tx) < 6: return 0
+    for k in range(2, 9):
+        if len(tx) >= 3 * k and tx[-k:] == tx[-2 * k:-k] == tx[-3 * k:-2 * k]:
+            keep = len(tx) - 2 * k; c = 0
+            for i, t in enumerate(seq):
+                if t < EOT: c += 1
+                if c == keep: return i + 1
+    return 0
 def lev(a, b):
     d = list(range(len(b) + 1))
     for i, ca in enumerate(a, 1):
@@ -102,7 +116,7 @@ data = {'ko': fleurs('ko_kr'), 'en': fleurs('en_us')}
 for mk, (enc, dec, h, dm) in MODELS.items():
     M = Model(enc, dec, h, dm)
     for lk, items in data.items():
-        errs = tot = 0; lang_ok = ends = halluc = 0; secs = 0.0; dur = 0.0; ex = []
+        errs = tot = 0; lang_ok = ends = halluc = 0; secs = 0.0; dur = 0.0; ex = []; worst = []
         for x, ref in items:
             t0 = time.time(); r = M.run(x); secs += time.time() - t0; dur += len(x) / 16000
             hyp, rf = norm(r['text']), norm(ref)
@@ -110,7 +124,8 @@ for mk, (enc, dec, h, dm) in MODELS.items():
             else: a, b = hyp.split(), rf.split()
             errs += lev(a, b); tot += max(1, len(b)); lang_ok += r['lang'] == lk; ends += bool(re.search(r'[.?!。…]\s*$', r['text'])); halluc += (r['loop'] or r['silent'] or not r['text'])
             if len(ex) < 4: ex.append({'ref': ref[:80], 'hyp': r['text'][:80], 'lang': r['lang']})
-        res['by'][f'{mk}-{lk}'] = {'err': round(errs / tot, 4), 'metric': 'CER' if lk == 'ko' else 'WER', 'langOk': round(lang_ok / len(items), 3), 'endPunct': round(ends / len(items), 3), 'empty': round(halluc / len(items), 3), 'rtf': round(secs / dur, 3), 'n': len(items), 'ex': ex}
+            worst.append((lev(a, b) / max(1, len(b)), ref[:90], r['text'][:160], r['loop']))
+        res['by'][f'{mk}-{lk}'] = {'err': round(errs / tot, 4), 'metric': 'CER' if lk == 'ko' else 'WER', 'langOk': round(lang_ok / len(items), 3), 'endPunct': round(ends / len(items), 3), 'empty': round(halluc / len(items), 3), 'rtf': round(secs / dur, 3), 'n': len(items), 'ex': ex, 'loops': sum(1 for w in worst if w[3]), 'worst': [{'e': round(w[0], 3), 'ref': w[1], 'hyp': w[2], 'loop': w[3]} for w in sorted(worst, reverse=True)[:5]]}
         print(mk, lk, json.dumps(res['by'][f'{mk}-{lk}'], ensure_ascii=False))
 os.makedirs('models', exist_ok=True); json.dump(res, open('models/whisper-eval.json', 'w'), ensure_ascii=False, indent=1)
 print('RESULT', json.dumps({k: {a: v[a] for a in ['err', 'metric', 'langOk', 'endPunct', 'empty', 'rtf']} for k, v in res['by'].items()}, ensure_ascii=False))
